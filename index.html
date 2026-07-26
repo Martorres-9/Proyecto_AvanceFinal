@@ -1,0 +1,2136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador de Órbitas y Trayectorias Espaciales</title>
+<style>
+  :root{
+    --azul-profundo:#050510;
+    --azul-panel:#10102a;
+    --azul-borde:#252550;
+    --violeta:#7c3aed;
+    --violeta-suave:#a78bfa;
+    --gris-sideral:#7c86b8;
+    --cian:#22d3ee;
+    --amarillo-neon:#fbbf24;
+    --blanco:#f4f6ff;
+    --rojo:#ef4444;
+    --verde:#4ade80;
+    --glass-bg:rgba(14,14,36,0.55);
+    --glass-bg-fuerte:rgba(10,10,26,0.72);
+    --glass-borde:rgba(150,160,255,0.14);
+    --glass-sombra:0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Roboto,sans-serif;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(124,58,237,0.14), transparent 60%),
+      radial-gradient(ellipse 900px 500px at 85% 110%, rgba(34,211,238,0.10), transparent 60%),
+      var(--azul-profundo);
+    color:#e0e8ff;min-height:100vh;overflow-x:hidden;
+  }
+
+  /* ===================== PANTALLA DE CARGA ===================== */
+  #pantalla-carga{
+    position:fixed;inset:0;background:radial-gradient(ellipse at center,#0a0a20 0%,#000006 80%);
+    z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    transition:opacity .8s ease, visibility .8s ease;
+  }
+  #pantalla-carga.oculta{opacity:0;visibility:hidden;pointer-events:none;}
+  #pantalla-carga svg#estrellas-carga{position:absolute;inset:0;width:100%;height:100%;}
+  .estrella-parpadeo{animation:parpadeo 2.4s ease-in-out infinite;}
+  @keyframes parpadeo{0%,100%{opacity:.15;}50%{opacity:1;}}
+  #cohete-carga{width:120px;height:120px;animation:vuelo-cohete 2.6s ease-in-out infinite;filter:drop-shadow(0 0 12px #22d3ee);}
+  @keyframes vuelo-cohete{
+    0%{transform:translate(-90px,90px) rotate(-45deg);}
+    50%{transform:translate(90px,-90px) rotate(-45deg);}
+    100%{transform:translate(-90px,90px) rotate(-45deg);}
+  }
+  #texto-carga{margin-top:36px;font-size:1.05rem;letter-spacing:2px;color:var(--cian);text-transform:uppercase;font-weight:600;}
+  #texto-carga .puntos span{animation:parpadeo-puntos 1.4s infinite;}
+  #texto-carga .puntos span:nth-child(2){animation-delay:.2s;}
+  #texto-carga .puntos span:nth-child(3){animation-delay:.4s;}
+  @keyframes parpadeo-puntos{0%,100%{opacity:0;}50%{opacity:1;}}
+  #barra-carga-cont{width:280px;height:4px;background:#1a1a40;border-radius:4px;margin-top:22px;overflow:hidden;}
+  #barra-carga{height:100%;width:0%;background:linear-gradient(90deg,var(--cian),var(--violeta));border-radius:4px;animation:cargar-barra 2.4s ease forwards;}
+  @keyframes cargar-barra{to{width:100%;}}
+
+  /* ===================== LAYOUT PRINCIPAL ===================== */
+  .contenedor{max-width:1600px;margin:0 auto;padding:20px;opacity:0;transition:opacity .6s ease;}
+  .contenedor.visible{opacity:1;}
+  h1{text-align:center;color:var(--amarillo-neon);margin-bottom:6px;text-shadow:0 0 15px #fbbf2460;font-size:2.2rem;letter-spacing:.5px;}
+  .subtitulo{text-align:center;color:var(--gris-sideral);margin-bottom:22px;font-size:13px;letter-spacing:1px;text-transform:uppercase;}
+  .contenedor-principal{display:grid;grid-template-columns:420px 1fr;gap:25px;margin-bottom:20px;align-items:start;}
+
+  /* ===================== GLASSMORPHISM ===================== */
+  .panel{
+    background:var(--glass-bg);
+    backdrop-filter:blur(20px) saturate(150%);
+    -webkit-backdrop-filter:blur(20px) saturate(150%);
+    border-radius:22px;padding:22px;
+    box-shadow:var(--glass-sombra);
+    border:1px solid var(--glass-borde);
+    position:relative;overflow:hidden;
+  }
+  .panel::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,0.35),transparent);
+  }
+  .panel h2{color:var(--cian);margin-bottom:18px;border-bottom:1px solid rgba(120,130,220,0.25);padding-bottom:10px;font-size:1.25rem;display:flex;justify-content:space-between;align-items:center;letter-spacing:.3px;}
+  #lienzo-simulacion{width:100%;height:560px;background:radial-gradient(circle at center,#0d0d28 0%,#000009 72%);border-radius:16px;border:1px solid rgba(120,130,220,0.25);display:block;cursor:grab;touch-action:none;transition:box-shadow .3s;}
+  #lienzo-simulacion:active{cursor:grabbing;}
+  #lienzo-simulacion.temblando{animation:temblor .35s ease;}
+  @keyframes temblor{
+    0%,100%{transform:translate(0,0);} 20%{transform:translate(-6px,4px);} 40%{transform:translate(5px,-5px);}
+    60%{transform:translate(-4px,-3px);} 80%{transform:translate(4px,5px);}
+  }
+  .campo{margin-bottom:14px;position:relative;}
+  label{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:14px;color:#b0c4ff;font-weight:500;}
+  .ayuda-contextual{font-size:11px;color:#8892c8;margin-top:4px;line-height:1.4;}
+  input,select,button{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(120,130,220,0.3);background:rgba(20,20,50,0.6);color:#fff;font-size:14px;transition:all .25s cubic-bezier(.4,0,.2,1);}
+  input:focus,select:focus{outline:none;border-color:var(--cian);box-shadow:0 0 10px #22d3ee40;}
+  input.campo-invalido{border-color:var(--rojo)!important;box-shadow:0 0 8px #ef444460;animation:sacudir .35s;}
+  @keyframes sacudir{0%,100%{transform:translateX(0);}25%{transform:translateX(-4px);}75%{transform:translateX(4px);}}
+  button{background:linear-gradient(135deg,#2563eb,#4338ca);font-weight:600;cursor:pointer;margin-top:6px;border:none;letter-spacing:.2px;}
+  button:hover{background:linear-gradient(135deg,#3b82f6,#5b4fd6);transform:translateY(-2px);box-shadow:0 6px 18px #2563eb50;}
+  button:active{transform:translateY(0);}
+  button.secundario{background:rgba(60,65,110,0.55);}
+  button.secundario:hover{background:rgba(80,86,140,0.7);box-shadow:0 6px 18px #00000040;}
+  button.peligro{background:linear-gradient(135deg,#dc2626,#991b1b);}
+  button.peligro:hover{background:linear-gradient(135deg,#ef4444,#b91c1c);box-shadow:0 6px 18px #dc262650;}
+  button.caos{background:linear-gradient(135deg,#7c3aed,#db2777);}
+  button.caos:hover{background:linear-gradient(135deg,#8b5cf6,#ec4899);box-shadow:0 6px 20px #db277750;}
+  button.caos.activo{background:linear-gradient(135deg,#f97316,#dc2626);box-shadow:0 0 18px #f9731670;}
+  button.mini{padding:6px;font-size:16px;margin-top:0;width:36px;border-radius:10px;}
+  button.chip{width:auto;flex:1;min-width:80px;padding:8px 6px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px;}
+  button.chip.seleccionado{outline:2px solid var(--cian);box-shadow:0 0 14px #22d3ee60;}
+  .botones-grupo{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;}
+  .botones-grupo button{flex:1;min-width:140px;}
+  .zoom-grupo{display:flex;gap:6px;}
+  #resultados,#reporte,#info-mision{margin-top:16px;padding:14px;background:rgba(10,10,30,0.5);border-radius:12px;font-size:13px;line-height:1.6;max-height:280px;overflow-y:auto;border:1px solid rgba(120,130,220,0.2);}
+  .etiqueta{font-weight:bold;color:var(--amarillo-neon);}
+  .mision-desc{color:var(--violeta-suave);font-style:italic;margin-bottom:10px;padding:10px;background:rgba(20,20,50,0.5);border-radius:10px;border:1px solid rgba(120,130,220,0.15);}
+  .leyenda{display:flex;gap:15px;flex-wrap:wrap;margin-top:10px;font-size:12px;}
+  .leyenda span{display:flex;align-items:center;gap:5px;}
+  .punto{width:10px;height:10px;border-radius:50%;display:inline-block;}
+  .telemetria{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;font-size:12px;}
+  .telemetria .celda{background:rgba(10,10,30,0.5);border:1px solid rgba(120,130,220,0.2);border-radius:10px;padding:8px 10px;}
+  .telemetria .celda .valor{color:var(--verde);font-weight:bold;font-size:14px;display:block;margin-top:2px;}
+  .telemetria .celda.alerta-fondo{border-color:var(--rojo);}
+  .estado-mision{margin-top:10px;font-size:12px;padding:8px 10px;border-radius:10px;background:rgba(20,20,50,0.5);border:1px solid rgba(120,130,220,0.2);transition:all .3s;}
+  .descubrimiento{color:var(--cian);font-weight:bold;}
+  .ciencia{color:var(--violeta-suave);font-weight:bold;}
+  .alerta{color:var(--rojo);font-weight:bold;margin:6px 0;}
+  .exito{color:var(--verde);font-weight:bold;margin:6px 0;}
+  @media (max-width:1024px){.contenedor-principal{grid-template-columns:1fr;}}
+
+  /* ===================== BARRAS DE HERRAMIENTAS ===================== */
+  .toolbar-camara{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;}
+  .toolbar-camara button{flex:1;min-width:90px;font-size:12px;padding:8px 6px;}
+  .panel-caos{margin-top:14px;padding:14px;border-radius:14px;background:rgba(30,10,45,0.45);border:1px solid rgba(180,90,220,0.25);display:none;}
+  .panel-caos.visible{display:block;animation:aparecer .3s ease;}
+  @keyframes aparecer{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+  .panel-caos-titulo{font-size:12px;color:#e9b8ff;margin-bottom:8px;letter-spacing:.4px;text-transform:uppercase;font-weight:700;}
+  .fila-chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .aviso-caos{font-size:11px;color:#c9a8e8;margin-top:8px;line-height:1.5;}
+
+  /* ===================== PANEL EDUCATIVO FLOTANTE ===================== */
+  #panel-educativo{
+    position:fixed;top:0;right:0;height:100%;width:360px;max-width:90vw;
+    background:var(--glass-bg-fuerte);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);
+    border-left:1px solid var(--glass-borde);box-shadow:-10px 0 40px rgba(0,0,0,0.5);
+    z-index:4000;transform:translateX(100%);transition:transform .4s cubic-bezier(.16,1,.3,1);
+    padding:24px;overflow-y:auto;
+  }
+  #panel-educativo.visible{transform:translateX(0);}
+  #panel-educativo h3{color:var(--amarillo-neon);font-size:1.3rem;margin-bottom:4px;}
+  #panel-educativo .sub{color:var(--gris-sideral);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:18px;}
+  #panel-educativo .cerrar-edu{position:absolute;top:18px;right:18px;width:32px;background:rgba(255,255,255,0.08);border-radius:50%;padding:6px;text-align:center;font-size:16px;cursor:pointer;margin:0;}
+  #panel-educativo .cerrar-edu:hover{background:rgba(255,255,255,0.18);transform:none;box-shadow:none;}
+  .concepto{margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.04);border-radius:12px;border-left:3px solid var(--cian);}
+  .concepto strong{color:var(--cian);display:block;margin-bottom:4px;font-size:13px;}
+  .concepto p{font-size:12.5px;color:#c8d0f5;line-height:1.55;}
+  .curiosidad{margin-top:18px;padding:14px;background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(34,211,238,0.10));border-radius:12px;font-size:12.5px;line-height:1.6;color:#e6ddff;border:1px solid rgba(180,150,255,0.2);}
+  .datos-vivos{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .datos-vivos div{background:rgba(0,0,0,0.25);border-radius:10px;padding:8px;font-size:11px;}
+  .datos-vivos div b{display:block;color:var(--verde);font-size:13px;margin-top:2px;}
+
+  /* ===================== SISTEMA DE ALERTAS FLOTANTES ===================== */
+  #pila-alertas{position:fixed;top:20px;right:20px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:380px;}
+  .toast-alerta{border-radius:14px;padding:14px 16px;color:#fff;box-shadow:0 6px 22px #00000080;animation:entra-alerta .35s ease;font-size:13.5px;line-height:1.5;border-left:5px solid #fff;backdrop-filter:blur(14px);}
+  @keyframes entra-alerta{from{transform:translateX(60px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+  .toast-alerta.error{background:rgba(42,14,18,0.85);border-left-color:var(--rojo);}
+  .toast-alerta.advertencia{background:rgba(42,36,8,0.85);border-left-color:var(--amarillo-neon);}
+  .toast-alerta.confirmacion{background:rgba(14,42,22,0.85);border-left-color:var(--verde);}
+  .toast-cabecera{display:flex;justify-content:space-between;align-items:center;font-weight:bold;margin-bottom:6px;}
+  .toast-cerrar{cursor:pointer;background:none;border:none;color:#ccc;width:auto;padding:0;font-size:16px;}
+  .toast-cerrar:hover{color:#fff;background:none;transform:none;box-shadow:none;}
+  .toast-acciones{display:flex;gap:8px;margin-top:10px;}
+  .toast-acciones button{flex:1;padding:6px;font-size:12px;margin-top:0;}
+</style>
+</head>
+<body>
+
+<!-- ========================= PANTALLA DE CARGA ========================= -->
+<div id="pantalla-carga">
+  <svg id="estrellas-carga" xmlns="http://www.w3.org/2000/svg"></svg>
+  <svg id="cohete-carga" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <path d="M32 4 C40 14 44 28 42 42 L32 50 L22 42 C20 28 24 14 32 4 Z" fill="#c8d4ff" stroke="#22d3ee" stroke-width="1.5"/>
+    <circle cx="32" cy="24" r="5" fill="#0a0a20" stroke="#22d3ee" stroke-width="1.5"/>
+    <path d="M22 42 L12 52 L20 48 Z" fill="#7c3aed"/>
+    <path d="M42 42 L52 52 L44 48 Z" fill="#7c3aed"/>
+    <path d="M27 48 Q32 62 37 48 Q32 54 27 48 Z" fill="#fbbf24"/>
+  </svg>
+  <div id="texto-carga">Iniciando sistema de simulación orbital<span class="puntos"><span>.</span><span>.</span><span>.</span></span></div>
+  <div id="barra-carga-cont"><div id="barra-carga"></div></div>
+</div>
+
+<!-- ========================= PILA DE ALERTAS FLOTANTES ========================= -->
+<div id="pila-alertas"></div>
+
+<!-- ========================= PANEL EDUCATIVO ========================= -->
+<div id="panel-educativo">
+  <button class="mini cerrar-edu" onclick="cerrarPanelEducativo()">✕</button>
+  <h3 id="edu-titulo">—</h3>
+  <div class="sub" id="edu-subtitulo">—</div>
+  <div id="edu-contenido"></div>
+</div>
+
+<div class="contenedor" id="contenedor-app">
+  <h1>🚀 SIMULADOR DE ÓRBITAS Y TRAYECTORIAS ESPACIALES</h1>
+  <div class="subtitulo">Tecnologías de la Información "C" — Nivelación</div>
+
+  <div class="contenedor-principal">
+    <!-- Panel de controles -->
+    <div class="panel">
+      <h2>⚙️ Configuración</h2>
+
+      <div class="campo">
+        <label>🪐 Cuerpo central:</label>
+        <select id="cuerpo-central">
+          <option value="1">Tierra</option>
+          <option value="2">Luna</option>
+          <option value="3">Marte</option>
+          <option value="4">Venus</option>
+          <option value="5">Mercurio</option>
+          <option value="6">Júpiter</option>
+          <option value="7">Saturno</option>
+          <option value="8">Urano</option>
+          <option value="9">Neptuno</option>
+          <option value="10">Sol</option>
+          <option value="11">Ingresar manualmente</option>
+        </select>
+      </div>
+
+      <div id="campos-manuales" style="display:none;">
+        <div class="campo">
+          <label>Nombre del cuerpo central:</label>
+          <input type="text" id="nombre-manual" placeholder="Ej: Asteroide">
+        </div>
+        <div class="campo">
+          <label>Masa (kg):</label>
+          <input type="number" step="any" id="masa-manual" placeholder="Ej: 1e20">
+        </div>
+        <div class="campo">
+          <label>Radio (metros):</label>
+          <input type="number" step="any" id="radio-manual" placeholder="Ej: 500000">
+        </div>
+      </div>
+
+      <div class="campo">
+        <label>🛰️ Misión del satélite:</label>
+        <select id="mision">
+          <option value="1">Comunicaciones</option>
+          <option value="2">Navegación (GPS)</option>
+          <option value="3">Observación terrestre</option>
+          <option value="4">Investigación científica</option>
+          <option value="5">Meteorología</option>
+        </select>
+      </div>
+
+      <div id="info-mision"></div>
+
+      <div class="campo">
+        <label>Nombre del satélite:</label>
+        <input type="text" id="nombre-satelite" placeholder="Ej: Sat-1">
+        <div class="ayuda-contextual">Si repites un nombre ya activo, la simulación anterior se desvanecerá y esta la reemplazará. Cada nombre lleva su propio contador de lanzamientos (máx. 25).</div>
+      </div>
+
+      <div class="campo">
+        <label>Masa del satélite (kg):</label>
+        <input type="number" step="any" id="masa-satelite" placeholder="Ej: 1200">
+      </div>
+
+      <div class="campo">
+        <label>Distancia inicial al centro (metros):</label>
+        <input type="number" step="any" id="distancia-inicial" placeholder="Ej: 42164000">
+        <div class="ayuda-contextual" id="ayuda-distancia">Debe ser mayor al radio del cuerpo elegido.</div>
+      </div>
+
+      <div class="campo">
+        <label>Velocidad inicial (m/s):</label>
+        <input type="number" step="any" id="velocidad-inicial" placeholder="Ej: 3075">
+        <div class="ayuda-contextual" id="ayuda-velocidad">Elige primero el cuerpo y la distancia para ver la velocidad orbital ideal sugerida.</div>
+      </div>
+
+      <div class="campo">
+        <label>Ángulo de velocidad (grados):</label>
+        <input type="number" step="any" id="angulo-inicial" placeholder="Ej: 90">
+      </div>
+
+      <div class="campo">
+        <label>Combustible disponible (kg):</label>
+        <input type="number" step="any" id="combustible" placeholder="Ej: 800">
+      </div>
+
+      <div class="campo">
+        <label>Velocidad de animación:</label>
+        <input type="range" id="velocidad-animacion" min="1" max="20" value="5">
+      </div>
+
+      <div class="botones-grupo">
+        <button onclick="iniciarSimulacion()">▶️ Iniciar Simulación</button>
+        <button class="secundario" onclick="pausarReanudar()">⏸️ Pausa</button>
+      </div>
+      <div class="botones-grupo">
+        <button class="secundario" onclick="mostrarReporte()">📊 Reporte</button>
+        <button class="peligro" onclick="reiniciarTodo()">🔄 Reiniciar</button>
+      </div>
+
+      <!-- MODO CAOS -->
+      <button class="caos" id="boton-modo-caos" onclick="alternarModoCaos()" style="margin-top:16px;">🌀 MODO CAOS</button>
+      <div class="panel-caos" id="panel-caos">
+        <div class="panel-caos-titulo">☄️ Herramientas — clic en el lienzo para colocar</div>
+        <div class="fila-chips">
+          <button class="chip secundario" data-herramienta="asteroide" onclick="elegirHerramientaCaos('asteroide')">☄️<span>Asteroide</span></button>
+          <button class="chip secundario" data-herramienta="cometa" onclick="elegirHerramientaCaos('cometa')">☄️<span>Cometa</span></button>
+          <button class="chip secundario" data-herramienta="agujero" onclick="elegirHerramientaCaos('agujero')">⚫<span>Agujero negro</span></button>
+          <button class="chip secundario" data-herramienta="supernova" onclick="elegirHerramientaCaos('supernova')">💥<span>Supernova</span></button>
+          <button class="chip secundario" data-herramienta="explosion" onclick="elegirHerramientaCaos('explosion')">✨<span>Explosión</span></button>
+        </div>
+        <div class="fila-chips" style="margin-top:8px;">
+          <button class="chip secundario" onclick="limpiarCaos()">🧹<span>Limpiar caos</span></button>
+          <button class="chip secundario" id="boton-sonido" onclick="alternarSonido()">🔇<span>Sonido</span></button>
+        </div>
+        <div class="aviso-caos" id="aviso-caos">Elige una herramienta y haz clic sobre el lienzo. Los agujeros negros atraen y absorben asteroides, cometas y satélites cercanos.</div>
+      </div>
+
+      <div id="resultados"></div>
+    </div>
+
+    <!-- Panel de visualización -->
+    <div class="panel">
+      <h2>🌍 Visualización de la Misión
+        <span class="zoom-grupo">
+          <button class="mini secundario" onclick="zoom(0.8)">＋</button>
+          <button class="mini secundario" onclick="zoom(1.25)">－</button>
+        </span>
+      </h2>
+      <svg id="lienzo-simulacion" xmlns="http://www.w3.org/2000/svg">
+        <defs id="defs-lienzo">
+          <radialGradient id="nebulosa-violeta" cx="30%" cy="25%" r="55%">
+            <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.16"/>
+            <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="nebulosa-cian" cx="78%" cy="72%" r="50%">
+            <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.12"/>
+            <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="100%" height="100%" fill="url(#nebulosa-violeta)"/>
+        <rect x="0" y="0" width="100%" height="100%" fill="url(#nebulosa-cian)"/>
+        <g id="capa-estrellas-lejos"></g>
+        <g id="capa-estrellas-media"></g>
+        <g id="capa-estrellas-cerca"></g>
+        <g id="capa-zonas"></g>
+        <g id="capa-orbitas-teoricas"></g>
+        <g id="capa-trayectorias"></g>
+        <g id="capa-caos-fondo"></g>
+        <g id="capa-cuerpo-central"></g>
+        <g id="capa-caos"></g>
+        <g id="capa-satelites"></g>
+        <g id="capa-hud"></g>
+      </svg>
+      <div class="toolbar-camara">
+        <button class="secundario" onclick="centrarCamara()">🎯 Centrar</button>
+        <button class="secundario" id="boton-seguir" onclick="alternarSeguimiento()">📷 Seguir en foco</button>
+        <button class="secundario" onclick="vistaLibre()">🕹️ Vista libre</button>
+      </div>
+      <div class="leyenda">
+        <span><span class="punto" style="background:#ffd700"></span> Cuerpo central</span>
+        <span><span class="punto" style="background:#ef4444"></span> Satélite</span>
+        <span><span class="punto" style="background:#3b82f6"></span> Trayectoria real</span>
+        <span><span class="punto" style="background:#f97316"></span> Zona de operación</span>
+        <span><span class="punto" style="background:#94a3b8"></span> Órbita teórica (Kepler)</span>
+      </div>
+
+      <div class="campo" id="control-enfoque" style="display:none;margin-top:14px;">
+        <label>Satélite en foco (telemetría / cámara) <span id="contador-activos" style="color:#93c5fd"></span>:</label>
+        <select id="selector-enfoque" onchange="cambiarEnfoque()"></select>
+      </div>
+
+      <div class="telemetria" id="telemetria" style="display:none;">
+        <div class="celda">Altitud <span class="valor" id="t-altitud">-</span></div>
+        <div class="celda">Velocidad <span class="valor" id="t-velocidad">-</span></div>
+        <div class="celda">Distancia al centro <span class="valor" id="t-distancia">-</span></div>
+        <div class="celda" id="t-combustible-celda">Combustible <span class="valor" id="t-combustible">-</span></div>
+        <div class="celda">Tiempo de misión <span class="valor" id="t-tiempo">-</span></div>
+        <div class="celda">Excentricidad <span class="valor" id="t-excentricidad">-</span></div>
+      </div>
+      <div class="estado-mision" id="estado-mision" style="display:none;"></div>
+
+      <div id="reporte"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   CONSTANTES Y DATOS
+   ============================================================ */
+const G = 6.674e-11;
+const cuerposCelestes = {
+  1:{nombre:"Tierra",masa:5.972e24,radio:6371000,color:"#2f6fd6",colorClaro:"#bfe3ff",colorOscuro:"#0a1a3a",tipo:"terrestre",
+     curiosidad:"La Tierra es el único cuerpo conocido con placas tectónicas activas y vida confirmada. Su campo magnético, generado por su núcleo de hierro líquido, nos protege del viento solar."},
+  2:{nombre:"Luna",masa:7.342e22,radio:1737400,color:"#9a9aa0",colorClaro:"#eaeaea",colorOscuro:"#26262c",tipo:"terrestre",
+     curiosidad:"La Luna se aleja de la Tierra unos 3.8 cm por año. Siempre muestra la misma cara porque su rotación está sincronizada (acoplamiento de marea) con su traslación."},
+  3:{nombre:"Marte",masa:6.39e23,radio:3389500,color:"#c1502e",colorClaro:"#ffb08a",colorOscuro:"#3a1608",tipo:"terrestre",
+     curiosidad:"Marte tiene el volcán más alto del sistema solar, el Monte Olimpo, con casi 22 km de altura, casi 2.5 veces el Everest."},
+  4:{nombre:"Venus",masa:4.867e24,radio:6051800,color:"#d9b96a",colorClaro:"#fff2c0",colorOscuro:"#3a2f10",tipo:"terrestre",
+     curiosidad:"Venus rota tan lento y en sentido contrario que un día venusino (243 días terrestres) dura más que su año (225 días)."},
+  5:{nombre:"Mercurio",masa:3.301e23,radio:2439700,color:"#8c8c8c",colorClaro:"#c8c8c8",colorOscuro:"#1e1e1e",tipo:"terrestre",
+     curiosidad:"Pese a estar más cerca del Sol, Mercurio no es el planeta más caliente: al no tener atmósfera, su temperatura nocturna cae a -170°C."},
+  6:{nombre:"Júpiter",masa:1.898e27,radio:69911000,color:"#c9a06a",colorClaro:"#f0d0a0",colorOscuro:"#2a1f10",tipo:"gigante",bandas:true,
+     curiosidad:"La Gran Mancha Roja de Júpiter es una tormenta anticiclónica más grande que la Tierra, activa desde hace al menos 350 años."},
+  7:{nombre:"Saturno",masa:5.683e26,radio:58232000,color:"#e0c896",colorClaro:"#fff0d0",colorOscuro:"#2a2210",tipo:"gigante",anillos:true,bandas:true,
+     curiosidad:"Los anillos de Saturno están hechos casi enteramente de hielo de agua y tienen apenas unos 10 metros de espesor promedio."},
+  8:{nombre:"Urano",masa:8.681e25,radio:25362000,color:"#8fdada",colorClaro:"#d0fff8",colorOscuro:"#0e2a2a",tipo:"gigante-helado",
+     curiosidad:"Urano gira prácticamente 'de lado', con un eje inclinado 98°, probablemente por un impacto colosal en su pasado."},
+  9:{nombre:"Neptuno",masa:1.024e26,radio:24622000,color:"#3b62d6",colorClaro:"#8aa0ff",colorOscuro:"#0a1030",tipo:"gigante-helado",
+     curiosidad:"Neptuno tiene los vientos más rápidos del sistema solar, con ráfagas de hasta 2100 km/h."},
+  10:{nombre:"Sol",masa:1.989e30,radio:696340000,color:"#ffd23f",colorClaro:"#fff6c0",colorOscuro:"#7a3d00",tipo:"estrella",brilla:true,
+      curiosidad:"El Sol convierte cerca de 4 millones de toneladas de masa en energía cada segundo por fusión nuclear, y aun así solo ha usado ~0.03% de su masa en 4600 millones de años."}
+};
+
+const misionesConfig = {
+  1:{nombre:"Comunicaciones",descripcion:"Se mantiene en órbita geoestacionaria fija sobre un punto del planeta para transmitir señales sin interrupciones.",zona:"Órbita circular a 35786 km de altura",colorTrayectoria:"#60a5fa",comportamiento:"Corrige activamente la velocidad radial (station-keeping) para no derivar de su posición fija",intervaloRevision:5},
+  2:{nombre:"Navegación (GPS)",descripcion:"Forma parte de una red de satélites que recorren órbitas inclinadas para cubrir todo el planeta.",zona:"Órbitas circulares inclinadas a 20200 km",colorTrayectoria:"#a78bfa",comportamiento:"Ejecuta pequeñas maniobras periódicas de cambio de plano para cubrir zonas de alta latitud",intervaloRevision:12},
+  3:{nombre:"Observación terrestre",descripcion:"Vuela en órbita polar baja para obtener imágenes detalladas de toda la superficie.",zona:"Órbita polar baja a 400-800 km",colorTrayectoria:"#34d399",comportamiento:"Sufre fricción atmosférica residual y ejecuta reimpulsos (reboost) para no decaer y reentrar",intervaloRevision:8},
+  4:{nombre:"Investigación científica",descripcion:"Usa órbitas elípticas muy alargadas para estudiar zonas cercanas y lejanas al cuerpo central.",zona:"Órbita elíptica variable",colorTrayectoria:"#f472b6",comportamiento:"Aplica quemados en el periastro para elevar progresivamente el apoastro y explorar más lejos",intervaloRevision:20},
+  5:{nombre:"Meteorología",descripcion:"Monitorea nubes y clima desde órbita ecuatorial o inclinada, ajustando su altura según necesidades.",zona:"Órbita media o geoestacionaria",colorTrayectoria:"#fbbf24",comportamiento:"Realiza correcciones leves y espaciadas para seguir sistemas climáticos sin gastar mucho combustible",intervaloRevision:15}
+};
+
+const hallazgosObservacion = [
+  "📸 Imagen captada: se detectó un gran huracán formándose sobre el océano",
+  "📸 Imagen captada: se observó una erupción volcánica activa",
+  "📸 Imagen captada: se identificó un incendio forestal de gran escala",
+  "📸 Imagen captada: se detectaron patrones inusuales de deforestación",
+  "📸 Imagen captada: se avistó un desprendimiento de iceberg de gran tamaño",
+  "📸 Imagen captada: se registró una aurora sobre la región polar",
+  "📸 Imagen captada: se observó una inundación extensa en la cuenca de un río"
+];
+const actividadesCientifica = [
+  "🔬 Analizando la composición del campo magnético circundante",
+  "📡 Registrando niveles de radiación cósmica",
+  "🧪 Tomando muestra espectral del entorno",
+  "🛰️ Calibrando instrumentos científicos de a bordo",
+  "📊 Procesando datos de gravimetría local",
+  "🌌 Midiendo variaciones del viento solar",
+  "🧫 Analizando partículas capturadas en el periastro"
+];
+
+/* Límites ampliados */
+const MAX_SATELITES = 25;
+const MAX_LANZAMIENTOS_POR_NOMBRE = 25;
+const MAX_SIMULACIONES = 1000;
+const DURACION_DESVANECIMIENTO = 2000;
+const MAX_OBJETOS_CAOS = 45;
+const UMBRAL_COLISION_AGUJEROS = 2.2e6; // metros: si dos agujeros negros quedan más cerca que esto, colapsan juntos
+
+/* ============================================================
+   ESTADO GLOBAL
+   ============================================================ */
+let simulaciones = [];
+let registroPorNombre = {};
+let contador = 0;
+let circulares = 0, elipticas = 0, parabolicas = 0, hiperbolicas = 0;
+let sumaVelocidad = 0, sumaDistancia = 0, sumaCombustible = 0;
+
+let simulacionesActivas = [];
+let desvaneciendo = [];
+let indiceEnfoque = -1;
+let mensajeGlobal = null;
+let enPausa = false;
+
+/* ============================================================
+   PANTALLA DE CARGA
+   ============================================================ */
+function crearEstrellasCarga(){
+  const svg = document.getElementById('estrellas-carga');
+  const w = window.innerWidth, h = window.innerHeight;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  let html = '';
+  for(let i=0;i<140;i++){
+    const x = Math.random()*w, y = Math.random()*h, r = Math.random()*1.6+0.3;
+    const dur = (1.8+Math.random()*2.4).toFixed(2);
+    html += `<circle class="estrella-parpadeo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="#fff" style="animation-duration:${dur}s"/>`;
+  }
+  svg.innerHTML = html;
+}
+window.addEventListener('load', () => {
+  crearEstrellasCarga();
+  setTimeout(() => {
+    document.getElementById('pantalla-carga').classList.add('oculta');
+    document.getElementById('contenedor-app').classList.add('visible');
+    ajustarLienzo();
+    actualizarInfoMision();
+    actualizarAyudaContextual();
+    requestAnimationFrame(bucleGlobal);
+  }, 2600);
+});
+
+/* ============================================================
+   SISTEMA DE ALERTAS FLOTANTES
+   ============================================================ */
+function mostrarAlerta(tipo, titulo, mensaje, acciones){
+  const pila = document.getElementById('pila-alertas');
+  const iconos = {error:'⛔', advertencia:'⚠️', confirmacion:'✅'};
+  const div = document.createElement('div');
+  div.className = `toast-alerta ${tipo}`;
+  let accionesHtml = '';
+  if (acciones && acciones.length){
+    accionesHtml = `<div class="toast-acciones">${acciones.map((a,i)=>`<button class="secundario" data-idx="${i}">${a.texto}</button>`).join('')}</div>`;
+  }
+  div.innerHTML = `
+    <div class="toast-cabecera"><span>${iconos[tipo]||''} ${titulo}</span><button class="toast-cerrar">✕</button></div>
+    <div>${mensaje}</div>
+    ${accionesHtml}
+  `;
+  div.querySelector('.toast-cerrar').onclick = () => div.remove();
+  if (acciones && acciones.length){
+    div.querySelectorAll('.toast-acciones button').forEach(btn=>{
+      btn.onclick = () => { acciones[parseInt(btn.dataset.idx)].accion(); div.remove(); };
+    });
+  }
+  pila.appendChild(div);
+  if (tipo !== 'error'){
+    setTimeout(()=>{ if(div.parentNode) div.remove(); }, 9000);
+  }
+}
+
+/* ============================================================
+   AYUDA CONTEXTUAL Y VALIDACIÓN EXPLICATIVA
+   ============================================================ */
+function obtenerCuerpoSeleccionado(){
+  const opcion = parseInt(document.getElementById('cuerpo-central').value);
+  if (opcion === 11){
+    return {
+      nombre: document.getElementById('nombre-manual').value || "Cuerpo manual",
+      masa: parseFloat(document.getElementById('masa-manual').value),
+      radio: parseFloat(document.getElementById('radio-manual').value),
+      color:"#94a3b8", colorClaro:"#cbd5e1", colorOscuro:"#1e2430", tipo:"terrestre",
+      curiosidad:"Este es un cuerpo definido manualmente: sus propiedades físicas dependen totalmente de los valores que ingresaste."
+    };
+  }
+  return cuerposCelestes[opcion];
+}
+
+function actualizarAyudaContextual(){
+  const cuerpo = obtenerCuerpoSeleccionado();
+  const ayudaDist = document.getElementById('ayuda-distancia');
+  const ayudaVel = document.getElementById('ayuda-velocidad');
+  if (!cuerpo || isNaN(cuerpo.radio) || cuerpo.radio<=0){
+    ayudaDist.textContent = "Ingresa primero la masa y el radio del cuerpo manual (deben ser mayores a 0).";
+    ayudaVel.textContent = "Elige un cuerpo válido para calcular la velocidad orbital ideal.";
+    return;
+  }
+  ayudaDist.textContent = `Debe ser mayor al radio de ${cuerpo.nombre} (${(cuerpo.radio/1000).toFixed(1)} km). Ejemplo válido: ${(cuerpo.radio*1.5).toFixed(0)} m.`;
+  const distanciaInput = parseFloat(document.getElementById('distancia-inicial').value);
+  if (!isNaN(cuerpo.masa) && cuerpo.masa>0 && !isNaN(distanciaInput) && distanciaInput>cuerpo.radio){
+    const mu = G*cuerpo.masa;
+    const vIdeal = Math.sqrt(mu/distanciaInput);
+    const vEscape = Math.sqrt(2*mu/distanciaInput);
+    ayudaVel.textContent = `Para ${cuerpo.nombre} a esa distancia: velocidad circular ideal ≈ ${vIdeal.toFixed(1)} m/s · velocidad de escape ≈ ${vEscape.toFixed(1)} m/s.`;
+  } else {
+    ayudaVel.textContent = `Ingresa una distancia válida para ver la velocidad orbital ideal de ${cuerpo.nombre}.`;
+  }
+}
+['cuerpo-central','nombre-manual','masa-manual','radio-manual','distancia-inicial'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', actualizarAyudaContextual);
+});
+
+function marcarInvalido(id){
+  const el = document.getElementById(id);
+  el.classList.add('campo-invalido');
+  setTimeout(()=>el.classList.remove('campo-invalido'), 600);
+}
+
+function validarFormulario(){
+  const errores = [];
+  const opcionCuerpo = parseInt(document.getElementById('cuerpo-central').value);
+  const cuerpoCentral = obtenerCuerpoSeleccionado();
+
+  if (opcionCuerpo === 11){
+    if (isNaN(cuerpoCentral.masa) || cuerpoCentral.masa<=0){
+      errores.push({id:'masa-manual', mensaje:'La masa del cuerpo manual debe ser un número mayor a 0 (en kg). Ejemplo: 1e20 para un asteroide grande.'});
+    }
+    if (isNaN(cuerpoCentral.radio) || cuerpoCentral.radio<=0){
+      errores.push({id:'radio-manual', mensaje:'El radio del cuerpo manual debe ser un número mayor a 0 (en metros).'});
+    }
+  }
+
+  const masaSatelite = parseFloat(document.getElementById('masa-satelite').value);
+  const distanciaInicial = parseFloat(document.getElementById('distancia-inicial').value);
+  const velocidadInicial = parseFloat(document.getElementById('velocidad-inicial').value);
+  const anguloGrados = parseFloat(document.getElementById('angulo-inicial').value);
+  const combustibleDisponible = parseFloat(document.getElementById('combustible').value);
+
+  if (isNaN(masaSatelite) || masaSatelite<=0){
+    errores.push({id:'masa-satelite', mensaje:'La masa del satélite debe ser un número mayor a 0 (en kg).'});
+  }
+  if (errores.every(e=>e.id!=='masa-manual' && e.id!=='radio-manual') && !isNaN(cuerpoCentral.radio) && cuerpoCentral.radio>0){
+    if (isNaN(distanciaInicial) || distanciaInicial<=0){
+      errores.push({id:'distancia-inicial', mensaje:'La distancia inicial debe ser un número mayor a 0 (en metros).'});
+    } else if (distanciaInicial <= cuerpoCentral.radio){
+      errores.push({id:'distancia-inicial', mensaje:`Error: la distancia ingresada no puede ser menor o igual al radio de ${cuerpoCentral.nombre}. El radio de ${cuerpoCentral.nombre} es de ${(cuerpoCentral.radio/1000).toFixed(1)} km; ingresa un valor mayor a ${cuerpoCentral.radio.toFixed(0)} m.`});
+    }
+  }
+  if (isNaN(velocidadInicial) || velocidadInicial<0){
+    errores.push({id:'velocidad-inicial', mensaje:'La velocidad inicial debe ser un número mayor o igual a 0 (en m/s).'});
+  }
+  if (isNaN(anguloGrados)){
+    errores.push({id:'angulo-inicial', mensaje:'El ángulo de velocidad debe ser un número (en grados). Ejemplo: 90 para una órbita tangencial.'});
+  }
+  if (isNaN(combustibleDisponible) || combustibleDisponible<0){
+    errores.push({id:'combustible', mensaje:'El combustible disponible debe ser un número mayor o igual a 0 (en kg).'});
+  }
+
+  return {valido: errores.length===0, errores, cuerpoCentral, masaSatelite, distanciaInicial, velocidadInicial, anguloGrados, combustibleDisponible};
+}
+
+/* ============================================================
+   FUNCIONES AUXILIARES DE FÍSICA
+   ============================================================ */
+function calcularConsumoCombustible(velocidad, pasos, pasoTiempo){
+  return (velocidad/1000) + (pasos*pasoTiempo*0.001);
+}
+function calcularPromedio(suma, cantidad){ return cantidad>0 ? suma/cantidad : 0; }
+function consumoPorManiobra(deltaV, masaSatelite){
+  return Math.abs(deltaV) * (masaSatelite/1000) * 0.02;
+}
+function aceleracionGrav(mu,x,y){
+  const r = Math.hypot(x,y);
+  const f = -mu/(r*r*r);
+  return {ax:f*x, ay:f*y};
+}
+function derivar(estado, mu){
+  const a = aceleracionGrav(mu, estado.x, estado.y);
+  return {dx:estado.vx, dy:estado.vy, dvx:a.ax, dvy:a.ay};
+}
+function pasoRK4(estado, dt, mu){
+  const k1 = derivar(estado, mu);
+  const s2 = {x:estado.x+k1.dx*dt/2, y:estado.y+k1.dy*dt/2, vx:estado.vx+k1.dvx*dt/2, vy:estado.vy+k1.dvy*dt/2};
+  const k2 = derivar(s2, mu);
+  const s3 = {x:estado.x+k2.dx*dt/2, y:estado.y+k2.dy*dt/2, vx:estado.vx+k2.dvx*dt/2, vy:estado.vy+k2.dvy*dt/2};
+  const k3 = derivar(s3, mu);
+  const s4 = {x:estado.x+k3.dx*dt, y:estado.y+k3.dy*dt, vx:estado.vx+k3.dvx*dt, vy:estado.vy+k3.dvy*dt};
+  const k4 = derivar(s4, mu);
+  return {
+    x: estado.x + (dt/6)*(k1.dx+2*k2.dx+2*k3.dx+k4.dx),
+    y: estado.y + (dt/6)*(k1.dy+2*k2.dy+2*k3.dy+k4.dy),
+    vx: estado.vx + (dt/6)*(k1.dvx+2*k2.dvx+2*k3.dvx+k4.dvx),
+    vy: estado.vy + (dt/6)*(k1.dvy+2*k2.dvy+2*k3.dvy+k4.dvy)
+  };
+}
+function elementosOrbitales(mu,x,y,vx,vy){
+  const r = Math.hypot(x,y);
+  const v2 = vx*vx+vy*vy;
+  const energia = v2/2 - mu/r;
+  const a = -mu/(2*energia);
+  const exFactor = (v2 - mu/r)/mu;
+  const rvDot = (x*vx+y*vy)/mu;
+  const ex = exFactor*x - rvDot*vx;
+  const ey = exFactor*y - rvDot*vy;
+  const ecc = Math.hypot(ex,ey);
+  const argPeri = Math.atan2(ey,ex);
+  return {a, ecc, argPeri, energia};
+}
+
+/* ============================================================
+   LIENZO SVG: ajuste, defs
+   ============================================================ */
+const svgLienzo = document.getElementById('lienzo-simulacion');
+let centroX, centroY, escala, escalaActual, anchoLienzo, altoLienzo;
+
+function ajustarLienzo(){
+  const rect = svgLienzo.getBoundingClientRect();
+  anchoLienzo = rect.width; altoLienzo = rect.height;
+  svgLienzo.setAttribute('viewBox', `0 0 ${anchoLienzo} ${altoLienzo}`);
+  centroX = anchoLienzo/2; centroY = altoLienzo/2;
+  if (simulacionesActivas.length===0){
+    const distEntrada = parseFloat(document.getElementById('distancia-inicial').value);
+    escala = Math.max(3000000, isNaN(distEntrada) ? 42164000*1.2 : distEntrada*1.2);
+    if (escalaActual===undefined) escalaActual = escala;
+  }
+  generarEstrellasFondo();
+}
+function generarEstrellasFondo(){
+  const capas = [
+    {id:'capa-estrellas-lejos', densidad:9000, rMin:0.2, rMax:0.7, opBase:0.35, factor:0.15},
+    {id:'capa-estrellas-media', densidad:14000, rMin:0.3, rMax:1.1, opBase:0.55, factor:0.35},
+    {id:'capa-estrellas-cerca', densidad:20000, rMin:0.5, rMax:1.7, opBase:0.85, factor:0.65}
+  ];
+  capas.forEach(cfg=>{
+    const capa = document.getElementById(cfg.id);
+    capa.dataset.factor = cfg.factor;
+    const total = Math.floor((anchoLienzo*altoLienzo*2.2)/cfg.densidad);
+    let html = '';
+    for(let i=0;i<total;i++){
+      const x = (Math.random()-0.35)*anchoLienzo*1.7;
+      const y = (Math.random()-0.35)*altoLienzo*1.7;
+      const r = (Math.random()*(cfg.rMax-cfg.rMin)+cfg.rMin).toFixed(2);
+      const dur = (1.6+Math.random()*3.2).toFixed(2);
+      const op = (cfg.opBase*(0.5+Math.random()*0.6)).toFixed(2);
+      html += `<circle class="estrella-parpadeo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="#fff" opacity="${op}" style="animation-duration:${dur}s"/>`;
+    }
+    capa.innerHTML = html;
+  });
+}
+window.addEventListener('resize', ajustarLienzo);
+function zoom(factor){ escala = Math.max(1000000, escala*factor); }
+
+document.getElementById('mision').addEventListener('change', actualizarInfoMision);
+document.getElementById('cuerpo-central').addEventListener('change', (e)=>{
+  document.getElementById('campos-manuales').style.display = e.target.value==="11" ? "block" : "none";
+  ajustarLienzo();
+});
+
+function actualizarInfoMision(){
+  const mision = misionesConfig[document.getElementById('mision').value];
+  document.getElementById('info-mision').innerHTML = `
+    <div class="mision-desc">
+      <strong>${mision.nombre}:</strong> ${mision.descripcion}<br>
+      <span>Zona de operación: ${mision.zona}</span><br>
+      <span style="color:#93c5fd">Comportamiento: ${mision.comportamiento}</span>
+    </div>`;
+}
+
+const ns = 'http://www.w3.org/2000/svg';
+function crearElementoSVG(tag, attrs){
+  const el = document.createElementNS(ns, tag);
+  for(const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function asegurarGradienteCuerpo(cuerpo){
+  const id = 'grad-' + cuerpo.nombre.replace(/[^a-zA-Z0-9]/g,'');
+  const defs = document.getElementById('defs-lienzo');
+  if (!document.getElementById(id)){
+    const grad = crearElementoSVG('radialGradient', {id, cx:'35%', cy:'32%', r:'68%'});
+    grad.appendChild(crearElementoSVG('stop', {offset:'0%', 'stop-color': cuerpo.colorClaro||'#fff'}));
+    grad.appendChild(crearElementoSVG('stop', {offset:'55%', 'stop-color': cuerpo.color}));
+    grad.appendChild(crearElementoSVG('stop', {offset:'100%', 'stop-color': cuerpo.colorOscuro||cuerpo.color}));
+    defs.appendChild(grad);
+  }
+  if (!document.getElementById('filtro-brillo')){
+    const filtro = crearElementoSVG('filter', {id:'filtro-brillo', x:'-150%', y:'-150%', width:'400%', height:'400%'});
+    filtro.appendChild(crearElementoSVG('feGaussianBlur', {stdDeviation:'6', result:'blur'}));
+    const merge = crearElementoSVG('feMerge', {});
+    merge.appendChild(crearElementoSVG('feMergeNode', {in:'blur'}));
+    merge.appendChild(crearElementoSVG('feMergeNode', {in:'SourceGraphic'}));
+    filtro.appendChild(merge);
+    document.getElementById('defs-lienzo').appendChild(filtro);
+  }
+  if (!document.getElementById('filtro-brillo-fuerte')){
+    const filtro = crearElementoSVG('filter', {id:'filtro-brillo-fuerte', x:'-200%', y:'-200%', width:'500%', height:'500%'});
+    filtro.appendChild(crearElementoSVG('feGaussianBlur', {stdDeviation:'12', result:'blur'}));
+    const merge = crearElementoSVG('feMerge', {});
+    merge.appendChild(crearElementoSVG('feMergeNode', {in:'blur'}));
+    merge.appendChild(crearElementoSVG('feMergeNode', {in:'SourceGraphic'}));
+    filtro.appendChild(merge);
+    document.getElementById('defs-lienzo').appendChild(filtro);
+  }
+  return id;
+}
+
+/* ============================================================
+   SIMULACIÓN: creación de un nuevo satélite
+   ============================================================ */
+function iniciarSimulacion(){
+  const v = validarFormulario();
+  if (!v.valido){
+    v.errores.forEach(e => marcarInvalido(e.id));
+    mostrarAlerta('error', 'Datos inválidos', v.errores.map(e=>e.mensaje).join('<br><br>'));
+    return;
+  }
+  if (contador >= MAX_SIMULACIONES){
+    mostrarAlerta('advertencia', 'Límite alcanzado', `Se alcanzó el máximo de ${MAX_SIMULACIONES} simulaciones en esta sesión. Reinicia para continuar.`);
+    return;
+  }
+
+  ajustarLienzo();
+
+  const cuerpoCentral = v.cuerpoCentral;
+  if (simulacionesActivas.length>0 && simulacionesActivas[0].cuerpo.nombre !== cuerpoCentral.nombre){
+    simulacionesActivas.forEach(eliminarElementosSVG);
+    simulacionesActivas = [];
+    indiceEnfoque = -1;
+  }
+
+  const mision = misionesConfig[document.getElementById('mision').value];
+  const idMision = document.getElementById('mision').value;
+  const nombreSatelite = document.getElementById('nombre-satelite').value || `Satélite ${contador+1}`;
+
+  if (!registroPorNombre[nombreSatelite]) registroPorNombre[nombreSatelite] = {cuenta:0, lanzamientos:[]};
+  if (registroPorNombre[nombreSatelite].cuenta >= MAX_LANZAMIENTOS_POR_NOMBRE){
+    mostrarAlerta('advertencia', 'Límite por satélite', `"${nombreSatelite}" ya alcanzó el máximo de ${MAX_LANZAMIENTOS_POR_NOMBRE} lanzamientos. Usa otro nombre para un satélite nuevo.`);
+    return;
+  }
+
+  const idxExistente = simulacionesActivas.findIndex(s => s.nombreSatelite === nombreSatelite);
+  if (idxExistente !== -1){
+    iniciarDesvanecimiento(simulacionesActivas[idxExistente]);
+    simulacionesActivas.splice(idxExistente,1);
+    actualizarSelectorEnfoque();
+  } else if (simulacionesActivas.length >= MAX_SATELITES){
+    mostrarAlerta('advertencia', 'Máximo de satélites simultáneos', `Solo se permiten ${MAX_SATELITES} satélites distintos en pantalla al mismo tiempo. Espera a que alguno termine, reutiliza un nombre existente o reinicia.`);
+    return;
+  }
+
+  const distanciaInicial = v.distanciaInicial;
+  const velocidadInicial = v.velocidadInicial;
+  const anguloGrados = v.anguloGrados;
+  const combustibleDisponible = v.combustibleDisponible;
+  const masaSatelite = v.masaSatelite;
+  const pasoTiempo = 60;
+
+  const anguloRadianes = anguloGrados*Math.PI/180;
+  const mu = G*cuerpoCentral.masa;
+  const fuerzaGrav = G*cuerpoCentral.masa*masaSatelite/Math.pow(distanciaInicial,2);
+  const velOrbitalIdeal = Math.sqrt(mu/distanciaInicial);
+  const velEscape = Math.sqrt(2*mu/distanciaInicial);
+  const periodoSegundos = Math.sqrt((4*Math.pow(Math.PI,2)*Math.pow(distanciaInicial,3))/mu);
+  const periodoDias = periodoSegundos/86400;
+  const energiaCinetica = 0.5*masaSatelite*Math.pow(velocidadInicial,2);
+  const energiaPotencial = -(mu*masaSatelite/distanciaInicial);
+  const energiaTotal = energiaCinetica+energiaPotencial;
+
+  let tipoTrayectoria;
+  if (energiaTotal < 0){
+    tipoTrayectoria = Math.abs(velocidadInicial-velOrbitalIdeal) < 10 ? "CIRCULAR" : "ELÍPTICA";
+  } else {
+    tipoTrayectoria = Math.abs(energiaTotal) < 1000 ? "PARABÓLICA" : "HIPERBÓLICA";
+  }
+
+  let html = `<div class="etiqueta">📋 Resultados — ${nombreSatelite}:</div>`;
+  html += `<br>Cuerpo: ${cuerpoCentral.nombre} | Misión: ${mision.nombre}`;
+  html += `<br>Fuerza gravitatoria: ${fuerzaGrav.toExponential(4)} N`;
+  html += `<br>Velocidad ideal: ${velOrbitalIdeal.toFixed(2)} m/s | Escape: ${velEscape.toFixed(2)} m/s`;
+  html += `<br>Periodo orbital: ${periodoDias.toFixed(2)} días`;
+  html += `<br><span class="exito">Trayectoria: ${tipoTrayectoria}</span>`;
+  document.getElementById('resultados').innerHTML = html;
+  document.getElementById('telemetria').style.display = 'grid';
+  document.getElementById('estado-mision').style.display = 'block';
+
+  if (velocidadInicial < velOrbitalIdeal){
+    mostrarAlerta('advertencia','Órbita inestable', `La velocidad ingresada (${velocidadInicial.toFixed(1)} m/s) es menor a la ideal (${velOrbitalIdeal.toFixed(1)} m/s) para esta distancia: el satélite tenderá a caer hacia ${cuerpoCentral.nombre}.`);
+  }
+  if (velocidadInicial >= velEscape){
+    mostrarAlerta('advertencia','Velocidad de escape alcanzada', `Con ${velocidadInicial.toFixed(1)} m/s se supera la velocidad de escape (${velEscape.toFixed(1)} m/s): el satélite abandonará el sistema de ${cuerpoCentral.nombre}.`);
+  }
+  if (combustibleDisponible < 100){
+    mostrarAlerta('advertencia','Combustible bajo', `Solo hay ${combustibleDisponible.toFixed(1)} kg de combustible disponibles; la misión podría quedar sin control pronto.`);
+  }
+  if (distanciaInicial < cuerpoCentral.radio+100000){
+    mostrarAlerta('error','Riesgo de colisión', `La órbita inicial está muy cerca de la superficie de ${cuerpoCentral.nombre}: riesgo alto de colisión.`);
+  }
+
+  const registro = {
+    nombre:nombreSatelite, cuerpo:cuerpoCentral.nombre, mision:mision.nombre,
+    velocidad:velocidadInicial, distancia:distanciaInicial,
+    combustible: Math.max(0, combustibleDisponible - calcularConsumoCombustible(velocidadInicial,100,pasoTiempo)),
+    trayectoria: tipoTrayectoria,
+    lanzamientoNum: registroPorNombre[nombreSatelite].cuenta + 1
+  };
+  simulaciones.push(registro);
+  registroPorNombre[nombreSatelite].cuenta++;
+  registroPorNombre[nombreSatelite].lanzamientos.push(registro);
+
+  const nuevoSatelite = {
+    nombreSatelite, cuerpo:cuerpoCentral, mision, idMision, mu,
+    estado:{x:distanciaInicial, y:0, vx:velocidadInicial*Math.cos(anguloRadianes), vy:velocidadInicial*Math.sin(anguloRadianes)},
+    velOrbitalIdeal, distanciaObjetivo:distanciaInicial, tipoTrayectoria, pasoTiempo, masaSatelite,
+    combustible:combustibleDisponible, combustibleInicial:combustibleDisponible,
+    tiempoTranscurrido:0,
+    proximaRevisionManiobra: mision.intervaloRevision*60,
+    proximaRevisionEvento: (15+Math.random()*15)*60,
+    cooldownManiobraHasta:0, cooldownEventoHasta:0, radialAnterior:0,
+    misionActiva:true, mensajeTemporal:null, quemandoHasta:-1,
+    posiciones:[], registro
+  };
+
+  crearElementosSVG(nuevoSatelite);
+  simulacionesActivas.push(nuevoSatelite);
+  indiceEnfoque = simulacionesActivas.length-1;
+  actualizarSelectorEnfoque();
+
+  sumaVelocidad += velocidadInicial;
+  sumaDistancia += distanciaInicial;
+  sumaCombustible += registro.combustible;
+  switch(tipoTrayectoria){
+    case "CIRCULAR": circulares++; break;
+    case "ELÍPTICA": elipticas++; break;
+    case "PARABÓLICA": parabolicas++; break;
+    case "HIPERBÓLICA": hiperbolicas++; break;
+  }
+  contador++;
+
+  enPausa = false;
+  document.querySelector('button[onclick="pausarReanudar()"]').textContent = "⏸️ Pausa";
+}
+
+function iniciarDesvanecimiento(datos){
+  if (!datos.svg) return;
+  ['grupo','trayectoria','trayectoriaReciente','zona','orbita'].forEach(k=>{
+    const el = datos.svg[k];
+    if (!el) return;
+    el.style.transition = `opacity ${DURACION_DESVANECIMIENTO}ms ease`;
+    el.style.opacity = '0';
+  });
+  desvaneciendo.push(datos);
+  setTimeout(() => { eliminarElementosSVG(datos); desvaneciendo = desvaneciendo.filter(d=>d!==datos); }, DURACION_DESVANECIMIENTO+50);
+}
+
+function actualizarSelectorEnfoque(){
+  const contenedor = document.getElementById('control-enfoque');
+  const selector = document.getElementById('selector-enfoque');
+  const contadorTxt = document.getElementById('contador-activos');
+  if (simulacionesActivas.length===0){
+    contenedor.style.display='none'; selector.innerHTML=''; return;
+  }
+  contenedor.style.display='block';
+  contadorTxt.textContent = `(${simulacionesActivas.length}/${MAX_SATELITES})`;
+  selector.innerHTML = simulacionesActivas.map((s,i)=>`<option value="${i}">${s.nombreSatelite} — ${s.mision.nombre} (lanz. #${s.registro.lanzamientoNum})</option>`).join('');
+  if (indiceEnfoque<0 || indiceEnfoque>=simulacionesActivas.length) indiceEnfoque = simulacionesActivas.length-1;
+  selector.value = indiceEnfoque;
+}
+function cambiarEnfoque(){ indiceEnfoque = parseInt(document.getElementById('selector-enfoque').value); }
+
+/* ============================================================
+   COMPORTAMIENTO POR MISIÓN
+   ============================================================ */
+function actualizarMision(datos){
+  if (!datos.misionActiva) return;
+  aplicarManiobras(datos);
+  verificarEventosMision(datos);
+  if (datos.combustible <= 0){
+    datos.combustible = 0;
+    datos.misionActiva = false;
+    datos.mensajeTemporal = null;
+  }
+}
+function aplicarManiobras(datos){
+  const {estado, masaSatelite} = datos;
+  const r = Math.hypot(estado.x, estado.y);
+  const v = Math.hypot(estado.vx, estado.vy);
+  const velRadial = (estado.x*estado.vx + estado.y*estado.vy)/r;
+
+  if (datos.tiempoTranscurrido < datos.proximaRevisionManiobra || Date.now() < datos.cooldownManiobraHasta){
+    datos.radialAnterior = velRadial; return;
+  }
+  let deltaV=0, dirX=0, dirY=0, mensaje="";
+  const vx_u = estado.vx/v, vy_u = estado.vy/v;
+  const rx_u = estado.x/r, ry_u = estado.y/r;
+
+  switch(datos.idMision){
+    case "1":
+      if (Math.abs(velRadial) > 0.05){ deltaV=-velRadial*0.6; dirX=rx_u; dirY=ry_u; mensaje="🔥 Corrección de station-keeping (GEO)"; }
+      break;
+    case "2":
+      deltaV=1.2; dirX=-vy_u; dirY=vx_u; mensaje="🔥 Maniobra de cambio de plano (cobertura polar)";
+      break;
+    case "3":
+      if (r < datos.distanciaObjetivo*1.03){ deltaV=2.5; dirX=vx_u; dirY=vy_u; mensaje="🔥 Reimpulso (reboost) contra decaimiento orbital"; }
+      break;
+    case "4": {
+      const cruzoPeriastro = datos.radialAnterior<0 && velRadial>=0;
+      if (cruzoPeriastro){ deltaV=v*0.03; dirX=vx_u; dirY=vy_u; mensaje="🔥 Quemado en periastro: elevando el apoastro para explorar más lejos"; }
+      break;
+    }
+    case "5":
+      if (Math.abs(velRadial) > 0.15){ deltaV=-velRadial*0.25; dirX=rx_u; dirY=ry_u; mensaje="🔥 Ajuste leve de cobertura climática"; }
+      break;
+  }
+  if (deltaV !== 0 && datos.combustible > 0){
+    const costo = consumoPorManiobra(deltaV, masaSatelite);
+    const costoReal = Math.min(costo, datos.combustible);
+    const factorEfectivo = costo>0 ? costoReal/costo : 0;
+    estado.vx += dirX*deltaV*factorEfectivo;
+    estado.vy += dirY*deltaV*factorEfectivo;
+    datos.combustible -= costoReal;
+    datos.mensajeTemporal = {texto:mensaje, clase:"exito", hasta:Date.now()+7000};
+    datos.quemandoHasta = Date.now()+1500;
+    datos.cooldownManiobraHasta = Date.now()+9000;
+  }
+  datos.proximaRevisionManiobra = datos.tiempoTranscurrido + datos.mision.intervaloRevision*60;
+  datos.radialAnterior = velRadial;
+}
+function verificarEventosMision(datos){
+  if (datos.tiempoTranscurrido < datos.proximaRevisionEvento || Date.now() < datos.cooldownEventoHasta) return;
+  if (datos.idMision === "3"){
+    const mensaje = hallazgosObservacion[Math.floor(Math.random()*hallazgosObservacion.length)];
+    datos.mensajeTemporal = {texto:mensaje, clase:"descubrimiento", hasta:Date.now()+8000};
+    datos.cooldownEventoHasta = Date.now()+9000;
+    datos.proximaRevisionEvento = datos.tiempoTranscurrido + (20+Math.random()*20)*60;
+  } else if (datos.idMision === "4"){
+    const mensaje = actividadesCientifica[Math.floor(Math.random()*actividadesCientifica.length)];
+    datos.mensajeTemporal = {texto:mensaje, clase:"ciencia", hasta:Date.now()+6000};
+    datos.cooldownEventoHasta = Date.now()+7000;
+    datos.proximaRevisionEvento = datos.tiempoTranscurrido + (6+Math.random()*6)*60;
+  } else {
+    datos.proximaRevisionEvento = datos.tiempoTranscurrido + 3600;
+  }
+}
+function textoNominalMision(idMision){
+  switch(idMision){
+    case "1": return "🛰️ Órbita nominal — transmitiendo señal de comunicaciones";
+    case "2": return "🛰️ Órbita nominal — transmitiendo señal de navegación";
+    case "3": return "🛰️ Órbita nominal — capturando imágenes de la superficie";
+    case "4": return "🛰️ Órbita nominal — recolectando datos científicos";
+    case "5": return "🛰️ Órbita nominal — monitoreando patrones climáticos";
+    default: return "🛰️ Órbita nominal";
+  }
+}
+function calcularTextoEstado(datos){
+  if (!datos.misionActiva) return {texto:"🛑 Misión finalizada: combustible agotado. El satélite queda a la deriva sin control.", clase:"alerta"};
+  if (datos.mensajeTemporal && Date.now() < datos.mensajeTemporal.hasta) return {texto:datos.mensajeTemporal.texto, clase:datos.mensajeTemporal.clase};
+  return {texto:textoNominalMision(datos.idMision), clase:"exito"};
+}
+
+/* ============================================================
+   CREACIÓN / ACTUALIZACIÓN / ELIMINACIÓN DE ELEMENTOS SVG
+   ============================================================ */
+function crearElementosSVG(datos){
+  asegurarGradienteCuerpo(datos.cuerpo);
+
+  const zona = crearElementoSVG('circle', {
+    cx:centroX, cy:centroY, r:1, fill:'none',
+    stroke:hexConAlpha(datos.mision.colorTrayectoria,0.25), 'stroke-width':1, 'stroke-dasharray':'5,5'
+  });
+  document.getElementById('capa-zonas').appendChild(zona);
+
+  const orbita = crearElementoSVG('path', {fill:'none', stroke:'#94a3b8', 'stroke-opacity':0.35, 'stroke-width':1, 'stroke-dasharray':'4,6'});
+  document.getElementById('capa-orbitas-teoricas').appendChild(orbita);
+
+  const trayectoria = crearElementoSVG('path', {fill:'none', stroke:datos.mision.colorTrayectoria, 'stroke-width':2, 'stroke-opacity':0.55});
+  document.getElementById('capa-trayectorias').appendChild(trayectoria);
+  const trayectoriaReciente = crearElementoSVG('path', {fill:'none', stroke:datos.mision.colorTrayectoria, 'stroke-width':2.6, 'stroke-opacity':1, filter:'url(#filtro-brillo)'});
+  document.getElementById('capa-trayectorias').appendChild(trayectoriaReciente);
+
+  const grupo = crearElementoSVG('g', {class:'satelite-clic', style:'cursor:pointer'});
+  const halo = crearElementoSVG('circle', {r:10, fill:'none', stroke:'#fbbf2490', 'stroke-width':1.5, opacity:0});
+  const punto = crearElementoSVG('circle', {r:4.5, fill:'#ef4444', filter:'url(#filtro-brillo)'});
+  const vector = crearElementoSVG('line', {stroke:'#fbbf24', 'stroke-width':1.5});
+  const etiqueta = crearElementoSVG('text', {fill:'#fff', 'font-size':'10', 'font-family':'sans-serif'});
+  etiqueta.textContent = datos.nombreSatelite;
+  const llamas = crearElementoSVG('g', {});
+  grupo.appendChild(halo); grupo.appendChild(vector); grupo.appendChild(llamas); grupo.appendChild(punto); grupo.appendChild(etiqueta);
+  grupo.addEventListener('click', (e)=>{ e.stopPropagation(); indiceEnfoque = simulacionesActivas.indexOf(datos); actualizarSelectorEnfoque(); abrirPanelEducativoSatelite(datos); });
+  document.getElementById('capa-satelites').appendChild(grupo);
+
+  datos.svg = {zona, orbita, trayectoria, trayectoriaReciente, grupo, halo, punto, vector, etiqueta, llamas};
+  actualizarCuerpoCentralSVG(datos.cuerpo);
+}
+
+function eliminarElementosSVG(datos){
+  if (!datos.svg) return;
+  ['zona','orbita','trayectoria','trayectoriaReciente','grupo'].forEach(k=>{
+    const el = datos.svg[k];
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  });
+  datos.svg = null;
+}
+
+/* Dibuja/actualiza el único cuerpo central compartido por el grupo activo, con rotación,
+   halo, sombreado tipo terminador y — si es una estrella — corona animada de plasma. */
+let cuerpoCentralSVGActual = null;
+function actualizarCuerpoCentralSVG(cuerpo){
+  const capa = document.getElementById('capa-cuerpo-central');
+  if (cuerpoCentralSVGActual && cuerpoCentralSVGActual.nombre === cuerpo.nombre) return;
+  capa.innerHTML = '';
+  const gradId = asegurarGradienteCuerpo(cuerpo);
+  const g = crearElementoSVG('g', {id:'grupo-cuerpo-central', style:'cursor:pointer'});
+
+  if (cuerpo.brilla){
+    const corona = crearElementoSVG('g', {id:'corona-cuerpo', filter:'url(#filtro-brillo-fuerte)'});
+    for(let i=0;i<3;i++){
+      corona.appendChild(crearElementoSVG('circle', {cx:centroX, cy:centroY, r:8, fill:'none', stroke:'#ffb02090', 'stroke-width':2, id:`corona-anillo-${i}`}));
+    }
+    g.appendChild(corona);
+    const halo = crearElementoSVG('circle', {cx:centroX, cy:centroY, r:8, fill:'url(#'+gradId+')', opacity:0.35, id:'halo-cuerpo', filter:'url(#filtro-brillo-fuerte)'});
+    g.appendChild(halo);
+  } else {
+    const halo = crearElementoSVG('circle', {cx:centroX, cy:centroY, r:8, fill:'none', stroke:hexConAlpha(cuerpo.color,0.3), 'stroke-width':3, id:'halo-cuerpo', filter:'url(#filtro-brillo)'});
+    g.appendChild(halo);
+  }
+
+  if (cuerpo.anillos){
+    g.appendChild(crearElementoSVG('ellipse', {cx:centroX, cy:centroY, rx:20, ry:6, fill:'none', stroke:'#e0c99050', 'stroke-width':3, id:'anillo-cuerpo-atras'}));
+  }
+  const circulo = crearElementoSVG('circle', {cx:centroX, cy:centroY, r:8, fill:`url(#${gradId})`, id:'circulo-cuerpo'});
+  g.appendChild(circulo);
+  if (cuerpo.bandas){
+    const bandas = crearElementoSVG('g', {id:'bandas-cuerpo', 'clip-path':'circle()'});
+    for(let i=0;i<4;i++){
+      bandas.appendChild(crearElementoSVG('ellipse', {cx:centroX, cy:centroY-4+i*3, rx:9, ry:1.3, fill:hexConAlpha(cuerpo.colorOscuro||'#000',0.25)}));
+    }
+    g.appendChild(bandas);
+  }
+  const terminador = crearElementoSVG('ellipse', {cx:centroX, cy:centroY, rx:3, ry:8, fill:'rgba(0,0,0,0.35)', id:'terminador-cuerpo'});
+  g.appendChild(terminador);
+  if (cuerpo.anillos){
+    g.appendChild(crearElementoSVG('ellipse', {cx:centroX, cy:centroY, rx:20, ry:6, fill:'none', stroke:'#f5e3b850', 'stroke-width':2, id:'anillo-cuerpo-frente', style:'clip-path:inset(0 0 50% 0)'}));
+  }
+  const texto = crearElementoSVG('text', {x:centroX+16, y:centroY-5, fill:'#fff', 'font-size':'12', 'font-family':'sans-serif', id:'texto-cuerpo'});
+  texto.textContent = cuerpo.nombre;
+  g.appendChild(texto);
+  g.addEventListener('click', (e)=>{ e.stopPropagation(); abrirPanelEducativoCuerpo(cuerpo); });
+  capa.appendChild(g);
+  cuerpoCentralSVGActual = cuerpo;
+}
+
+function hexConAlpha(hex, alpha){
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
+}
+
+/* ============================================================
+   CÁMARA: pan con inercia, zoom suavizado, seguimiento
+   ============================================================ */
+let offsetX = 0, offsetY = 0;
+let panVelX = 0, panVelY = 0;
+let arrastrando = false, ultimoMouseX = 0, ultimoMouseY = 0, ultimoTiempoArrastre = 0;
+let distanciaClicAcumulada = 0;
+let modoSeguimiento = false; // sigue al satélite en foco
+
+function escalaPxBase(){ return Math.min(anchoLienzo, altoLienzo)*0.4; }
+
+function coordenadasMundo(sx, sy){
+  const epx = escalaPxBase();
+  const bx = sx - centroX - offsetX;
+  const by = sy - centroY - offsetY;
+  return { x: (bx/epx)*escalaActual, y: -(by/epx)*escalaActual };
+}
+function posicionAPantalla(x, y){
+  const epx = escalaPxBase();
+  return { x: centroX + offsetX + (x/escalaActual)*epx, y: centroY + offsetY - (y/escalaActual)*epx };
+}
+function coordenadasCliente(e){
+  const rect = svgLienzo.getBoundingClientRect();
+  const cx = (e.touches? e.touches[0].clientX : e.clientX) - rect.left;
+  const cy = (e.touches? e.touches[0].clientY : e.clientY) - rect.top;
+  return {x: cx*(anchoLienzo/rect.width), y: cy*(altoLienzo/rect.height)};
+}
+
+svgLienzo.addEventListener('mousedown', (e)=>{
+  arrastrando = true; modoSeguimiento = false;
+  const p = coordenadasCliente(e);
+  ultimoMouseX = p.x; ultimoMouseY = p.y; ultimoTiempoArrastre = performance.now();
+  distanciaClicAcumulada = 0;
+  panVelX = 0; panVelY = 0;
+});
+window.addEventListener('mousemove', (e)=>{
+  if (!arrastrando) return;
+  const p = coordenadasCliente(e);
+  const dx = p.x - ultimoMouseX, dy = p.y - ultimoMouseY;
+  const ahora = performance.now();
+  const dt = Math.max(1, ahora - ultimoTiempoArrastre);
+  offsetX += dx; offsetY += dy;
+  panVelX = dx/dt*16; panVelY = dy/dt*16;
+  distanciaClicAcumulada += Math.hypot(dx,dy);
+  ultimoMouseX = p.x; ultimoMouseY = p.y; ultimoTiempoArrastre = ahora;
+});
+window.addEventListener('mouseup', (e)=>{
+  if (!arrastrando) return;
+  arrastrando = false;
+  if (distanciaClicAcumulada < 5){
+    const p = coordenadasCliente(e.changedTouches ? e.changedTouches[0] : e);
+    manejarClicLienzo(p.x, p.y);
+  }
+});
+svgLienzo.addEventListener('wheel', (e)=>{ e.preventDefault(); zoom(e.deltaY>0 ? 1.1 : 0.9); modoSeguimiento=false; }, {passive:false});
+
+function centrarCamara(){
+  offsetX = 0; offsetY = 0; panVelX = 0; panVelY = 0; modoSeguimiento = false;
+  actualizarBotonSeguir();
+}
+function vistaLibre(){
+  modoSeguimiento = false;
+  actualizarBotonSeguir();
+}
+function alternarSeguimiento(){
+  modoSeguimiento = !modoSeguimiento;
+  actualizarBotonSeguir();
+  if (modoSeguimiento && indiceEnfoque<0){
+    mostrarAlerta('advertencia','Sin satélite en foco','Lanza o selecciona un satélite en el panel de enfoque para poder seguirlo con la cámara.');
+    modoSeguimiento = false; actualizarBotonSeguir();
+  }
+}
+function actualizarBotonSeguir(){
+  document.getElementById('boton-seguir').classList.toggle('caos', modoSeguimiento);
+  document.getElementById('boton-seguir').textContent = modoSeguimiento ? '📷 Siguiendo…' : '📷 Seguir en foco';
+}
+
+function actualizarCamara(dtFrame){
+  escalaActual += (escala - escalaActual)*0.12;
+  if (modoSeguimiento && indiceEnfoque>=0 && simulacionesActivas[indiceEnfoque]){
+    const datos = simulacionesActivas[indiceEnfoque];
+    const epx = escalaPxBase();
+    const objX = -(datos.estado.x/escalaActual)*epx;
+    const objY = (datos.estado.y/escalaActual)*epx;
+    offsetX += (objX-offsetX)*0.08;
+    offsetY += (objY-offsetY)*0.08;
+  } else if (!arrastrando){
+    offsetX += panVelX*(dtFrame/16); offsetY += panVelY*(dtFrame/16);
+    panVelX *= 0.90; panVelY *= 0.90;
+    if (Math.abs(panVelX)<0.01) panVelX=0;
+    if (Math.abs(panVelY)<0.01) panVelY=0;
+  }
+}
+
+/* ============================================================
+   CLIC EN EL LIENZO: herramientas de caos o panel educativo
+   ============================================================ */
+function manejarClicLienzo(sx, sy){
+  if (modoCaosActivo && herramientaCaos){
+    const mundo = coordenadasMundo(sx, sy);
+    colocarObjetoCaos(herramientaCaos, mundo.x, mundo.y);
+    return;
+  }
+}
+
+/* ============================================================
+   BUCLE GLOBAL DE RENDERIZADO (cámara, física, caos, dibujo)
+   ============================================================ */
+const MAX_PUNTOS_TRAYECTORIA = 300;
+const PUNTOS_TRAMO_RECIENTE = 30;
+let ultimoTimestamp = 0;
+
+function bucleGlobal(timestamp){
+  const dtFrame = ultimoTimestamp ? Math.min(64, timestamp-ultimoTimestamp) : 16;
+  ultimoTimestamp = timestamp;
+
+  actualizarCamara(dtFrame);
+  actualizarParallax();
+  animarCuerposCelestes(timestamp);
+
+  if (simulacionesActivas.length>0 && !enPausa){
+    try{ pasoFisicaSatelites(); } catch(err){ console.error('Error en física, se omite el frame:', err); }
+  }
+  actualizarCaos(dtFrame);
+  dibujarEscena();
+  dibujarCaos();
+  actualizarTelemetria();
+  actualizarTemblor();
+
+  requestAnimationFrame(bucleGlobal);
+}
+
+function actualizarParallax(){
+  ['capa-estrellas-lejos','capa-estrellas-media','capa-estrellas-cerca'].forEach(id=>{
+    const capa = document.getElementById(id);
+    const f = parseFloat(capa.dataset.factor||0.3);
+    capa.setAttribute('transform', `translate(${offsetX*f+anchoLienzo*0.15*f},${offsetY*f+altoLienzo*0.15*f}) scale(${Math.max(0.6,Math.min(1.6, escala/escalaActual))})`);
+  });
+}
+
+function animarCuerposCelestes(ts){
+  const t = ts*0.001;
+  const terminador = document.getElementById('terminador-cuerpo');
+  if (terminador){
+    const ang = (t*10)%360;
+    const rx = Math.max(0.4, Math.abs(Math.cos(ang*Math.PI/180))*7.5);
+    terminador.setAttribute('rx', rx.toFixed(2));
+    terminador.setAttribute('cx', centroX + (ang>90&&ang<270? -2:2));
+  }
+  const halo = document.getElementById('halo-cuerpo');
+  if (halo && cuerpoCentralSVGActual && cuerpoCentralSVGActual.brilla){
+    const pulso = 0.30+Math.sin(t*1.3)*0.08;
+    halo.setAttribute('opacity', pulso.toFixed(2));
+  }
+  for(let i=0;i<3;i++){
+    const anillo = document.getElementById(`corona-anillo-${i}`);
+    if (!anillo) continue;
+    const fase = t*0.6+i*2.1;
+    const circuloCuerpo = document.getElementById('circulo-cuerpo');
+    const rBase = circuloCuerpo? parseFloat(circuloCuerpo.getAttribute('r')) : 8;
+    const r = rBase*(1.15+i*0.22) + Math.sin(fase)*rBase*0.12;
+    anillo.setAttribute('cx', centroX); anillo.setAttribute('cy', centroY); anillo.setAttribute('r', Math.max(1,r).toFixed(1));
+    anillo.setAttribute('opacity', (0.35-i*0.08+Math.sin(fase*1.7)*0.08).toFixed(2));
+  }
+}
+
+function pasoFisicaSatelites(){
+  const velAnim = parseInt(document.getElementById('velocidad-animacion').value);
+  for (let idx = simulacionesActivas.length-1; idx>=0; idx--){
+    const datos = simulacionesActivas[idx];
+    const dtTotal = datos.pasoTiempo*velAnim;
+
+    const rActual = Math.hypot(datos.estado.x, datos.estado.y);
+    const vActual = Math.hypot(datos.estado.vx, datos.estado.vy) || 1;
+    const escalaTiempoLocal = rActual / vActual;
+    const subpasos = Math.min(80, Math.max(4, Math.ceil(dtTotal / Math.max(1, escalaTiempoLocal*0.04))));
+    const dtSub = dtTotal/subpasos;
+    let colisiono = false;
+    let sePerdio = false;
+    let xColision = datos.estado.x, yColision = datos.estado.y;
+
+    for (let i=0;i<subpasos;i++){
+      const distanciaActual = Math.hypot(datos.estado.x, datos.estado.y);
+      if (distanciaActual <= datos.cuerpo.radio){ colisiono=true; xColision=datos.estado.x; yColision=datos.estado.y; break; }
+      const siguiente = pasoRK4(datos.estado, dtSub, datos.mu);
+      if (!isFinite(siguiente.x) || !isFinite(siguiente.y) || !isFinite(siguiente.vx) || !isFinite(siguiente.vy)){
+        sePerdio = true; break;
+      }
+      datos.estado = siguiente;
+      datos.tiempoTranscurrido += dtSub;
+    }
+
+    if (datos.idMision === "3" && !colisiono && !sePerdio){
+      const dragFactor = 3e-8;
+      const mult = 1 - dragFactor*dtTotal;
+      datos.estado.vx *= mult; datos.estado.vy *= mult;
+    }
+
+    if (colisiono){
+      registrarColision(datos, xColision, yColision);
+      eliminarElementosSVG(datos);
+      simulacionesActivas.splice(idx,1);
+      actualizarSelectorEnfoque();
+      continue;
+    }
+    if (sePerdio){
+      registrarPerdida(datos);
+      eliminarElementosSVG(datos);
+      simulacionesActivas.splice(idx,1);
+      actualizarSelectorEnfoque();
+      continue;
+    }
+
+    actualizarMision(datos);
+    if (!datos.misionActiva){
+      registrarFinCombustible(datos);
+      eliminarElementosSVG(datos);
+      simulacionesActivas.splice(idx,1);
+      actualizarSelectorEnfoque();
+      continue;
+    }
+    datos.posiciones.push({x:datos.estado.x, y:datos.estado.y, quemando: Date.now()<datos.quemandoHasta});
+    if (datos.posiciones.length > MAX_PUNTOS_TRAYECTORIA) datos.posiciones.shift();
+  }
+}
+
+function registrarColision(datos, xFisico, yFisico){
+  mensajeGlobal = {texto:`💥 ${datos.nombreSatelite} colisionó contra ${datos.cuerpo.nombre} y fue destruido.`, hasta:Date.now()+6000};
+  if (datos.registro) datos.registro.trayectoria += " (💥 colisionó)";
+  mostrarAlerta('error', 'Colisión', `${datos.nombreSatelite} impactó contra ${datos.cuerpo.nombre}.`);
+  const p = posicionAPantalla(xFisico, yFisico);
+  crearExplosionSVG(p.x, p.y, 1);
+  activarTemblor(8);
+  reproducirSonido('boom');
+}
+
+function registrarPerdida(datos){
+  mensajeGlobal = {texto:`📡 Se perdió la señal de ${datos.nombreSatelite}: la trayectoria se volvió inestable y salió de rango.`, hasta:Date.now()+6000};
+  if (datos.registro) datos.registro.trayectoria += " (📡 señal perdida)";
+  mostrarAlerta('advertencia', 'Señal perdida', `${datos.nombreSatelite} se volvió numéricamente inestable (probablemente una órbita demasiado excéntrica) y se retiró de la simulación para evitar que se congelara en pantalla.`);
+}
+
+function registrarFinCombustible(datos){
+  mensajeGlobal = {texto:`🛑 ${datos.nombreSatelite} se quedó sin combustible: la misión finalizó y la nave salió de la simulación.`, hasta:Date.now()+6000};
+  if (datos.registro) datos.registro.trayectoria += " (🛑 combustible agotado — misión finalizada)";
+  mostrarAlerta('advertencia', 'Misión finalizada', `${datos.nombreSatelite} se quedó sin combustible. Sin poder corregir su trayectoria, la simulación de esa nave termina aquí.`);
+}
+
+function crearExplosionSVG(x, y, escalaExplosion){
+  escalaExplosion = escalaExplosion || 1;
+  const capa = document.getElementById('capa-satelites');
+  const g = crearElementoSVG('g', {});
+  capa.appendChild(g);
+
+  const onda = crearElementoSVG('circle', {cx:x, cy:y, r:4, fill:'none', stroke:'#fb923c', 'stroke-width':3*escalaExplosion});
+  const nucleo = crearElementoSVG('circle', {cx:x, cy:y, r:2, fill:'#fde68a'});
+  g.appendChild(onda); g.appendChild(nucleo);
+
+  const particulas = [];
+  const nParticulas = Math.round(10*Math.min(3,escalaExplosion));
+  for (let i=0;i<nParticulas;i++){
+    const ang = Math.random()*Math.PI*2, dist = (20+Math.random()*32)*escalaExplosion;
+    const p = crearElementoSVG('circle', {cx:x, cy:y, r:(1.5+Math.random()*1.5).toFixed(1), fill: i%2? '#f97316':'#facc15'});
+    g.appendChild(p);
+    particulas.push({el:p, destX:x+Math.cos(ang)*dist, destY:y+Math.sin(ang)*dist});
+  }
+
+  const texto = crearElementoSVG('text', {x:x+14, y:y-16, fill:'#fecaca', 'font-size':13+escalaExplosion*3, 'font-weight':'bold', 'font-family':'sans-serif', opacity:0});
+  texto.textContent = escalaExplosion>1.8 ? '💥 SUPERNOVA' : '💥 BOOM';
+  g.appendChild(texto);
+
+  const inicio = performance.now();
+  const duracionTotal = 900*Math.sqrt(escalaExplosion);
+
+  function frame(ahora){
+    const t = Math.min(1, (ahora-inicio)/duracionTotal);
+
+    const rOnda = 4 + t*44*escalaExplosion;
+    onda.setAttribute('r', rOnda.toFixed(1));
+    onda.setAttribute('opacity', Math.max(0, 0.9*(1-t)).toFixed(2));
+
+    const tNucleo = Math.min(1, t/0.55);
+    const rNucleo = tNucleo<1 ? (2+tNucleo*14*escalaExplosion) : 3;
+    nucleo.setAttribute('r', rNucleo.toFixed(1));
+    nucleo.setAttribute('opacity', Math.max(0, 1-t/0.67).toFixed(2));
+
+    const tPart = Math.min(1, t/0.72);
+    particulas.forEach(p=>{
+      p.el.setAttribute('cx', (x+(p.destX-x)*tPart).toFixed(1));
+      p.el.setAttribute('cy', (y+(p.destY-y)*tPart).toFixed(1));
+      p.el.setAttribute('opacity', Math.max(0, 1-tPart).toFixed(2));
+    });
+
+    if (t>=0.1 && t<=0.6) texto.setAttribute('opacity', 1);
+    else texto.setAttribute('opacity', 0);
+
+    if (t < 1){
+      requestAnimationFrame(frame);
+    } else if (g.parentNode){
+      g.parentNode.removeChild(g);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   TEMBLOR DE CÁMARA
+   ============================================================ */
+let temblorHasta = 0, temblorIntensidad = 0;
+function activarTemblor(intensidad){
+  temblorHasta = Date.now()+350;
+  temblorIntensidad = Math.max(temblorIntensidad, intensidad);
+}
+function actualizarTemblor(){
+  if (Date.now() < temblorHasta){
+    svgLienzo.classList.add('temblando');
+  } else {
+    svgLienzo.classList.remove('temblando');
+    temblorIntensidad = 0;
+  }
+}
+
+/* ============================================================
+   SONIDO OPCIONAL (WebAudio, sin archivos externos)
+   ============================================================ */
+let sonidoActivado = false;
+let contextoAudio = null;
+function alternarSonido(){
+  sonidoActivado = !sonidoActivado;
+  const btn = document.getElementById('boton-sonido');
+  btn.classList.toggle('seleccionado', sonidoActivado);
+  btn.innerHTML = sonidoActivado ? '🔊<span>Sonido</span>' : '🔇<span>Sonido</span>';
+  if (sonidoActivado && !contextoAudio){
+    try{ contextoAudio = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+  }
+}
+function reproducirSonido(tipo){
+  if (!sonidoActivado || !contextoAudio) return;
+  try{
+    const ahora = contextoAudio.currentTime;
+    const osc = contextoAudio.createOscillator();
+    const gain = contextoAudio.createGain();
+    osc.connect(gain); gain.connect(contextoAudio.destination);
+    if (tipo==='boom'){
+      osc.type='sawtooth'; osc.frequency.setValueAtTime(160, ahora); osc.frequency.exponentialRampToValueAtTime(30, ahora+0.4);
+      gain.gain.setValueAtTime(0.25, ahora); gain.gain.exponentialRampToValueAtTime(0.001, ahora+0.45);
+      osc.start(ahora); osc.stop(ahora+0.45);
+    } else if (tipo==='absorcion'){
+      osc.type='sine'; osc.frequency.setValueAtTime(600, ahora); osc.frequency.exponentialRampToValueAtTime(60, ahora+0.5);
+      gain.gain.setValueAtTime(0.15, ahora); gain.gain.exponentialRampToValueAtTime(0.001, ahora+0.55);
+      osc.start(ahora); osc.stop(ahora+0.55);
+    } else {
+      osc.type='triangle'; osc.frequency.setValueAtTime(500, ahora);
+      gain.gain.setValueAtTime(0.18, ahora); gain.gain.exponentialRampToValueAtTime(0.001, ahora+0.25);
+      osc.start(ahora); osc.stop(ahora+0.25);
+    }
+  }catch(e){}
+}
+
+/* ============================================================
+   TELEMETRÍA
+   ============================================================ */
+function actualizarTelemetria(){
+  const panelTelemetria = document.getElementById('telemetria');
+  const panelEstado = document.getElementById('estado-mision');
+  if (mensajeGlobal && Date.now() >= mensajeGlobal.hasta) mensajeGlobal = null;
+
+  const datos = (indiceEnfoque>=0) ? simulacionesActivas[indiceEnfoque] : null;
+  if (!datos){
+    panelTelemetria.style.display='none';
+    if (mensajeGlobal){ panelEstado.style.display='block'; panelEstado.innerHTML = `<span class="alerta">${mensajeGlobal.texto}</span>`; }
+    else if (simulacionesActivas.length===0){ panelEstado.style.display='none'; }
+    return;
+  }
+  panelTelemetria.style.display='grid';
+  const r = Math.hypot(datos.estado.x, datos.estado.y);
+  const v = Math.hypot(datos.estado.vx, datos.estado.vy);
+  const altitud = r - datos.cuerpo.radio;
+  const {ecc} = elementosOrbitales(datos.mu, datos.estado.x, datos.estado.y, datos.estado.vx, datos.estado.vy);
+
+  document.getElementById('t-altitud').textContent = (altitud/1000).toFixed(1)+" km";
+  document.getElementById('t-velocidad').textContent = v.toFixed(1)+" m/s";
+  document.getElementById('t-distancia').textContent = r.toExponential(2)+" m";
+  document.getElementById('t-combustible').textContent = Math.max(0,datos.combustible).toFixed(1)+" kg";
+  document.getElementById('t-excentricidad').textContent = isFinite(ecc) ? ecc.toFixed(3) : "-";
+
+  const dias = Math.floor(datos.tiempoTranscurrido/86400);
+  const horas = Math.floor((datos.tiempoTranscurrido%86400)/3600);
+  const min = Math.floor((datos.tiempoTranscurrido%3600)/60);
+  document.getElementById('t-tiempo').textContent = `${dias}d ${horas}h ${min}m`;
+
+  const celdaComb = document.getElementById('t-combustible-celda');
+  celdaComb.classList.toggle('alerta-fondo', datos.combustible < datos.combustibleInicial*0.1);
+
+  panelEstado.style.display='block';
+  if (mensajeGlobal){ panelEstado.innerHTML = `<span class="alerta">${mensajeGlobal.texto}</span>`; }
+  else { const estado = calcularTextoEstado(datos); panelEstado.innerHTML = `<span class="${estado.clase}">${estado.texto}</span>`; }
+
+  if (panelEducativoDatosVivos && panelEducativoDatosVivos.tipo==='satelite' && panelEducativoDatosVivos.ref===datos){
+    actualizarDatosVivosSatelite(datos);
+  }
+}
+
+/* ============================================================
+   RENDERIZADO SVG POR FRAME (satélites, trayectorias, cuerpo)
+   ============================================================ */
+function dibujarEscena(){
+  if (simulacionesActivas.length===0 && desvaneciendo.length===0) return;
+  const escalaPx = escalaPxBase();
+
+  if (simulacionesActivas.length>0) actualizarCuerpoCentralSVG(simulacionesActivas[0].cuerpo);
+  const circuloCuerpo = document.getElementById('circulo-cuerpo');
+  const grupoCuerpo = document.getElementById('grupo-cuerpo-central');
+  if (circuloCuerpo && simulacionesActivas.length>0){
+    const cuerpo = simulacionesActivas[0].cuerpo;
+    const p0base = posicionAPantalla(0,0);
+    const distorsion = calcularDistorsionCuerpoCentral();
+    const p0 = {x:p0base.x+distorsion.dx, y:p0base.y-distorsion.dy};
+    const radioEscala = Math.max(8, (cuerpo.radio/escalaActual)*escalaPx) * (1 - distorsion.intensidad*0.12);
+    circuloCuerpo.setAttribute('cx', p0.x); circuloCuerpo.setAttribute('cy', p0.y); circuloCuerpo.setAttribute('r', radioEscala);
+    const halo = document.getElementById('halo-cuerpo');
+    if (halo){ halo.setAttribute('cx',p0.x); halo.setAttribute('cy',p0.y); halo.setAttribute('r', radioEscala*1.35); }
+    const texto = document.getElementById('texto-cuerpo');
+    if (texto){ texto.setAttribute('x', p0.x+radioEscala+8); texto.setAttribute('y', p0.y-5); }
+    ['anillo-cuerpo-atras','anillo-cuerpo-frente'].forEach(id=>{
+      const anillo = document.getElementById(id);
+      if (anillo){ anillo.setAttribute('cx',p0.x); anillo.setAttribute('cy',p0.y); anillo.setAttribute('rx',radioEscala*2.3); anillo.setAttribute('ry',radioEscala*0.65); }
+    });
+    const terminador = document.getElementById('terminador-cuerpo');
+    if (terminador){ terminador.setAttribute('cy', p0.y); terminador.setAttribute('ry', radioEscala*0.98); }
+    for(let i=0;i<3;i++){
+      const anillo = document.getElementById(`corona-anillo-${i}`);
+      if (anillo){ anillo.setAttribute('cx',p0.x); anillo.setAttribute('cy',p0.y); }
+    }
+  }
+
+  simulacionesActivas.forEach((datos, idx) => {
+    if (!datos.svg) return;
+
+    const p0 = posicionAPantalla(0,0);
+    datos.svg.zona.setAttribute('cx', p0.x); datos.svg.zona.setAttribute('cy', p0.y);
+    datos.svg.zona.setAttribute('r', (datos.distanciaObjetivo/escalaActual)*escalaPx);
+
+    dibujarOrbitaTeorica(datos, escalaPx);
+
+    const posiciones = datos.posiciones;
+    if (posiciones.length>1){
+      const total = posiciones.length;
+      const inicioReciente = Math.max(1, total-PUNTOS_TRAMO_RECIENTE);
+      let dPrincipal = '', dReciente = '';
+      for (let i=0;i<inicioReciente;i++){
+        const p = posicionAPantalla(posiciones[i].x, posiciones[i].y);
+        dPrincipal += (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ' ';
+      }
+      for (let i=inicioReciente-1;i<total;i++){
+        const p = posicionAPantalla(posiciones[i].x, posiciones[i].y);
+        dReciente += (i===inicioReciente-1?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ' ';
+      }
+      datos.svg.trayectoria.setAttribute('d', dPrincipal);
+      datos.svg.trayectoriaReciente.setAttribute('d', dReciente);
+    }
+
+    const pSat = posicionAPantalla(datos.estado.x, datos.estado.y);
+    const satX = pSat.x, satY = pSat.y;
+    const quemando = Date.now() < datos.quemandoHasta;
+
+    datos.svg.llamas.innerHTML = '';
+    if (quemando){
+      let html = '';
+      for (let i=0;i<6;i++){
+        const ang = Math.random()*Math.PI*2, rad = Math.random()*10+4;
+        const px = satX+Math.cos(ang)*rad, py = satY+Math.sin(ang)*rad;
+        const op = (Math.random()*0.6+0.2).toFixed(2);
+        html += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(Math.random()*2+1).toFixed(1)}" fill="rgba(255,${150+Math.floor(Math.random()*80)},0,${op})"/>`;
+      }
+      datos.svg.llamas.innerHTML = html;
+    }
+
+    const enFoco = idx === indiceEnfoque;
+    datos.svg.punto.setAttribute('cx', satX); datos.svg.punto.setAttribute('cy', satY);
+    datos.svg.punto.setAttribute('r', enFoco ? 6 : 4.5);
+    datos.svg.halo.setAttribute('cx', satX); datos.svg.halo.setAttribute('cy', satY);
+    datos.svg.halo.setAttribute('opacity', enFoco ? 1 : 0);
+
+    const vMag = Math.hypot(datos.estado.vx, datos.estado.vy);
+    if (vMag>0){
+      const vxN = (datos.estado.vx/vMag)*16, vyN = (datos.estado.vy/vMag)*16;
+      datos.svg.vector.setAttribute('x1', satX); datos.svg.vector.setAttribute('y1', satY);
+      datos.svg.vector.setAttribute('x2', satX+vxN); datos.svg.vector.setAttribute('y2', satY-vyN);
+    }
+    datos.svg.etiqueta.setAttribute('x', satX+9); datos.svg.etiqueta.setAttribute('y', satY-9);
+  });
+
+  let hud = document.getElementById('texto-hud');
+  const capaHud = document.getElementById('capa-hud');
+  if (!hud){ hud = crearElementoSVG('text', {id:'texto-hud', x:15, y:25, fill:'#fff', 'font-size':'13', 'font-weight':'bold', 'font-family':'sans-serif'}); capaHud.appendChild(hud); }
+  hud.textContent = `Satélites activos: ${simulacionesActivas.length}/${MAX_SATELITES}` + (objetosCaos.length? ` · Objetos de caos: ${objetosCaos.length}/${MAX_OBJETOS_CAOS}`:'');
+}
+
+function dibujarOrbitaTeorica(datos, escalaPx){
+  const {a, ecc, argPeri, energia} = elementosOrbitales(datos.mu, datos.estado.x, datos.estado.y, datos.estado.vx, datos.estado.vy);
+  if (energia>=0 || !isFinite(a) || ecc>=1){ datos.svg.orbita.setAttribute('d',''); return; }
+  const b = a*Math.sqrt(1-ecc*ecc);
+  const c = a*ecc;
+  let d = '';
+  for (let ang=0; ang<=Math.PI*2+0.05; ang+=0.08){
+    const ex = a*Math.cos(ang)-c, ey = b*Math.sin(ang);
+    const rx = ex*Math.cos(argPeri)-ey*Math.sin(argPeri);
+    const ry = ex*Math.sin(argPeri)+ey*Math.cos(argPeri);
+    const p = posicionAPantalla(rx, ry);
+    d += (ang===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)+' ';
+  }
+  datos.svg.orbita.setAttribute('d', d);
+}
+
+/* ============================================================
+   MODO CAOS: asteroides, cometas, agujeros negros, supernovas
+   ============================================================ */
+let modoCaosActivo = false;
+let herramientaCaos = null;
+let objetosCaos = [];
+let idCaosContador = 0;
+
+function alternarModoCaos(){
+  modoCaosActivo = !modoCaosActivo;
+  document.getElementById('boton-modo-caos').classList.toggle('activo', modoCaosActivo);
+  document.getElementById('panel-caos').classList.toggle('visible', modoCaosActivo);
+  if (!modoCaosActivo){ herramientaCaos = null; actualizarChipsCaos(); }
+  mostrarAlerta(modoCaosActivo?'advertencia':'confirmacion', modoCaosActivo?'Modo caos activado':'Modo caos desactivado',
+    modoCaosActivo? 'Elige una herramienta y haz clic sobre el lienzo para desatar el caos.' : 'La simulación vuelve a la normalidad.');
+}
+function elegirHerramientaCaos(tipo){
+  if (!modoCaosActivo){ alternarModoCaos(); }
+  herramientaCaos = (herramientaCaos===tipo) ? null : tipo;
+  actualizarChipsCaos();
+  const aviso = document.getElementById('aviso-caos');
+  const textos = {
+    asteroide:'Clic en el lienzo: lanza un asteroide rocoso afectado por la gravedad del cuerpo central y de agujeros negros cercanos. Si choca con un satélite, lo destruirá.',
+    cometa:'Clic en el lienzo: lanza un cometa helado con una cola de gas que siempre apunta en dirección opuesta al cuerpo central. Si choca con un satélite, lo destruirá.',
+    agujero:'Clic en el lienzo: crea un agujero negro con disco de acreción. Atraerá y absorberá asteroides, cometas y satélites que se acerquen demasiado, e incluso curva el espacio visible cerca del cuerpo central.',
+    supernova:'Clic en el lienzo: detona una supernova — una explosión masiva que sacude la cámara y destruye objetos de caos cercanos.',
+    explosion:'Clic en el lienzo: genera una explosión puntual con partículas y destello.'
+  };
+  aviso.textContent = herramientaCaos ? textos[herramientaCaos] : 'Elige una herramienta y haz clic sobre el lienzo.';
+}
+function actualizarChipsCaos(){
+  document.querySelectorAll('#panel-caos .chip[data-herramienta]').forEach(btn=>{
+    btn.classList.toggle('seleccionado', btn.dataset.herramienta===herramientaCaos);
+  });
+}
+function limpiarCaos(){
+  objetosCaos.forEach(o=>{ if(o.svg && o.svg.parentNode) o.svg.parentNode.removeChild(o.svg); });
+  objetosCaos = [];
+  mostrarAlerta('confirmacion','Caos despejado','Se eliminaron todos los objetos de caos del lienzo.');
+}
+
+function colocarObjetoCaos(tipo, x, y){
+  if (tipo==='supernova'){
+    const p = posicionAPantalla(x,y);
+    crearExplosionSVG(p.x, p.y, 2.2);
+    activarTemblor(20);
+    reproducirSonido('boom');
+    // destruye objetos de caos cercanos (radio proporcional a la escala visible)
+    const radioDestruccion = escalaActual*0.18;
+    objetosCaos = objetosCaos.filter(o=>{
+      const d = Math.hypot(o.x-x, o.y-y);
+      if (d < radioDestruccion){
+        const po = posicionAPantalla(o.x,o.y);
+        crearExplosionSVG(po.x, po.y, 0.8);
+        if (o.svg && o.svg.parentNode) o.svg.parentNode.removeChild(o.svg);
+        return false;
+      }
+      return true;
+    });
+    // también puede alcanzar a satélites cercanos
+    for (let idx = simulacionesActivas.length-1; idx>=0; idx--){
+      const sat = simulacionesActivas[idx];
+      const d = Math.hypot(sat.estado.x-x, sat.estado.y-y);
+      if (d < radioDestruccion){
+        destruirSatelitePorCaos(sat, idx, `la onda expansiva de una supernova`);
+      }
+    }
+    mostrarAlerta('advertencia','☀️ Supernova','Una estrella colapsó y liberó una onda expansiva masiva, destruyendo objetos cercanos.');
+    return;
+  }
+  if (tipo==='explosion'){
+    const p = posicionAPantalla(x,y);
+    crearExplosionSVG(p.x, p.y, 1);
+    activarTemblor(5);
+    reproducirSonido('boom');
+    return;
+  }
+  if (objetosCaos.length >= MAX_OBJETOS_CAOS){
+    mostrarAlerta('advertencia','Límite de objetos de caos', `Ya hay ${MAX_OBJETOS_CAOS} objetos de caos en pantalla. Usa "Limpiar caos" para liberar espacio.`);
+    return;
+  }
+
+  const capa = document.getElementById('capa-caos');
+  let obj = { id: idCaosContador++, tipo, x, y, radioColision: 6e5 };
+
+  if (tipo==='asteroide'){
+    const velTangencial = (Math.random()*0.6+0.3) * Math.sqrt(G*(simulacionesActivas[0]?simulacionesActivas[0].cuerpo.masa:5.972e24)/Math.max(1,Math.hypot(x,y)));
+    const ang = Math.atan2(y,x)+Math.PI/2;
+    obj.vx = Math.cos(ang)*velTangencial*(Math.random()>0.5?1:-1);
+    obj.vy = Math.sin(ang)*velTangencial*(Math.random()>0.5?1:-1);
+    obj.radioVisual = 3+Math.random()*2.5;
+    obj.rotacion = Math.random()*360; obj.velRotacion = (Math.random()-0.5)*180;
+    obj.color = '#9a8f80';
+    const g = crearElementoSVG('g', {});
+    const forma = crearElementoSVG('path', {d: formaAsteroide(obj.radioVisual), fill: obj.color, stroke:'#5c5346', 'stroke-width':0.6});
+    g.appendChild(forma);
+    capa.appendChild(g);
+    obj.svg = g; obj.svgForma = forma;
+  } else if (tipo==='cometa'){
+    const velTangencial = (Math.random()*0.5+0.5) * Math.sqrt(G*(simulacionesActivas[0]?simulacionesActivas[0].cuerpo.masa:5.972e24)/Math.max(1,Math.hypot(x,y)));
+    const ang = Math.atan2(y,x)+Math.PI/2;
+    obj.vx = Math.cos(ang)*velTangencial*(Math.random()>0.5?1:-1);
+    obj.vy = Math.sin(ang)*velTangencial*(Math.random()>0.5?1:-1);
+    obj.radioVisual = 3.5;
+    obj.color = '#bfe8ff';
+    const g = crearElementoSVG('g', {});
+    const cola = crearElementoSVG('path', {fill:'url(#grad-cola-cometa)', opacity:0.8});
+    const nucleo = crearElementoSVG('circle', {r:obj.radioVisual, fill:obj.color, filter:'url(#filtro-brillo)'});
+    g.appendChild(cola); g.appendChild(nucleo);
+    capa.appendChild(g);
+    asegurarGradienteCola();
+    obj.svg = g; obj.svgCola = cola; obj.svgNucleo = nucleo;
+  } else if (tipo==='agujero'){
+    obj.vx = 0; obj.vy = 0;
+    obj.masaEfectiva = 2e26; // masa relativa para atracción de objetos de caos
+    obj.radioEventoHorizonte = 8e5;
+    obj.radioInfluencia = 4.5e6; // alcance de la deformación visual / atracción a satélites y al cuerpo central
+    obj.radioVisual = 9;
+    const g = crearElementoSVG('g', {});
+    for(let i=0;i<3;i++){
+      g.appendChild(crearElementoSVG('ellipse', {rx:obj.radioVisual*(1.6+i*0.5), ry:obj.radioVisual*0.55, fill:'none', stroke:i%2?'#a78bfa':'#22d3ee', 'stroke-width':1.4, opacity:0.55-i*0.12, id:`disco-${obj.id}-${i}`}));
+    }
+    const horizonte = crearElementoSVG('circle', {r:obj.radioVisual, fill:'#000'});
+    g.appendChild(horizonte);
+    const halo = crearElementoSVG('circle', {r:obj.radioVisual*1.5, fill:'none', stroke:'#7c3aed80', 'stroke-width':2, filter:'url(#filtro-brillo)'});
+    g.appendChild(halo);
+    capa.appendChild(g);
+    obj.svg = g;
+    mostrarAlerta('advertencia','⚫ Agujero negro creado','Su gravedad afecta a asteroides, cometas, satélites y hasta al cuerpo central si se acerca demasiado. ¡Cuidado con acercarse!');
+  }
+
+  objetosCaos.push(obj);
+}
+
+function formaAsteroide(r){
+  let d = '';
+  const puntos = 8;
+  for(let i=0;i<puntos;i++){
+    const ang = (i/puntos)*Math.PI*2;
+    const rr = r*(0.7+Math.random()*0.6);
+    const px = Math.cos(ang)*rr, py = Math.sin(ang)*rr;
+    d += (i===0?'M':'L')+px.toFixed(1)+','+py.toFixed(1)+' ';
+  }
+  return d+'Z';
+}
+function asegurarGradienteCola(){
+  if (document.getElementById('grad-cola-cometa')) return;
+  const defs = document.getElementById('defs-lienzo');
+  const grad = crearElementoSVG('linearGradient', {id:'grad-cola-cometa', x1:'0%', y1:'0%', x2:'100%', y2:'0%'});
+  grad.appendChild(crearElementoSVG('stop', {offset:'0%', 'stop-color':'#bfe8ff', 'stop-opacity':'0'}));
+  grad.appendChild(crearElementoSVG('stop', {offset:'100%', 'stop-color':'#bfe8ff', 'stop-opacity':'0.75'}));
+  defs.appendChild(grad);
+}
+
+/* ------------------------------------------------------------
+   Impacto de asteroides/cometas contra satélites reales
+   ------------------------------------------------------------ */
+function destruirSatelitePorCaos(sat, idxEnArray, causaTexto){
+  const p = posicionAPantalla(sat.estado.x, sat.estado.y);
+  crearExplosionSVG(p.x, p.y, 1.2);
+  activarTemblor(10);
+  reproducirSonido('boom');
+  mensajeGlobal = {texto:`💥 ${sat.nombreSatelite} fue impactado por ${causaTexto} y quedó destruido.`, hasta:Date.now()+6000};
+  if (sat.registro) sat.registro.trayectoria += ` (💥 destruido por ${causaTexto})`;
+  mostrarAlerta('error', '¡Nave impactada!', `${sat.nombreSatelite} chocó contra ${causaTexto} y fue destruido.`);
+  eliminarElementosSVG(sat);
+  simulacionesActivas.splice(idxEnArray,1);
+  actualizarSelectorEnfoque();
+}
+
+function verificarImpactosCaosSatelites(){
+  if (objetosCaos.length===0 || simulacionesActivas.length===0) return;
+  for (let i=objetosCaos.length-1;i>=0;i--){
+    const o = objetosCaos[i];
+    if (o.tipo!=='asteroide' && o.tipo!=='cometa') continue;
+    for (let j=simulacionesActivas.length-1;j>=0;j--){
+      const sat = simulacionesActivas[j];
+      const d = Math.hypot(sat.estado.x-o.x, sat.estado.y-o.y);
+      const radioImpacto = o.radioColision + 2.5e5;
+      if (d < radioImpacto){
+        const causa = o.tipo==='asteroide' ? 'un asteroide' : 'un cometa';
+        destruirSatelitePorCaos(sat, j, causa);
+        if (o.svg && o.svg.parentNode) o.svg.parentNode.removeChild(o.svg);
+        objetosCaos.splice(i,1);
+        break;
+      }
+    }
+  }
+}
+
+function actualizarCaos(dtFrame){
+  if (objetosCaos.length===0) return;
+  const dt = dtFrame*0.9; // paso de integración decorativo (segundos simulados escalados)
+  const cuerpo = simulacionesActivas.length>0 ? simulacionesActivas[0].cuerpo : null;
+  const muCentral = cuerpo ? G*cuerpo.masa : 0;
+  const agujeros = objetosCaos.filter(o=>o.tipo==='agujero');
+
+  for (let i=objetosCaos.length-1;i>=0;i--){
+    const o = objetosCaos[i];
+    if (o.tipo==='asteroide' || o.tipo==='cometa'){
+      let ax=0, ay=0;
+      if (cuerpo){
+        const r = Math.max(1,Math.hypot(o.x,o.y));
+        const f = -muCentral/(r*r*r);
+        ax += f*o.x; ay += f*o.y;
+      }
+      agujeros.forEach(ag=>{
+        const dx = o.x-ag.x, dy = o.y-ag.y;
+        const r = Math.max(3e5, Math.hypot(dx,dy));
+        const fuerza = -(G*ag.masaEfectiva)/(r*r*r);
+        ax += fuerza*dx; ay += fuerza*dy;
+        if (r < ag.radioEventoHorizonte){
+          absorberObjeto(o, ag);
+        }
+      });
+      o.vx += ax*dt; o.vy += ay*dt;
+      o.x += o.vx*dt; o.y += o.vy*dt;
+      if (o.rotacion!==undefined) o.rotacion += (o.velRotacion||0)*dtFrame*0.001;
+
+      // colisión con el cuerpo central
+      if (cuerpo && Math.hypot(o.x,o.y) <= cuerpo.radio){
+        const p = posicionAPantalla(o.x,o.y);
+        crearExplosionSVG(p.x, p.y, 0.7);
+        if (o.svg && o.svg.parentNode) o.svg.parentNode.removeChild(o.svg);
+        objetosCaos.splice(i,1);
+        continue;
+      }
+    }
+  }
+
+  // aviso cuando un agujero negro se acerca lo suficiente al cuerpo central como para deformarlo visualmente
+  agujeros.forEach(ag=>{
+    if (!cuerpo) return;
+    const r = Math.hypot(ag.x, ag.y);
+    if (r < ag.radioInfluencia*0.5 && !ag.alertaCuerpoDada){
+      ag.alertaCuerpoDada = true;
+      activarTemblor(10);
+      mostrarAlerta('advertencia','⚫ Deformación gravitacional', `El agujero negro se acercó demasiado a ${cuerpo.nombre}: su gravedad está deformando visualmente el cuerpo central.`);
+    } else if (r >= ag.radioInfluencia*0.5){
+      ag.alertaCuerpoDada = false;
+    }
+  });
+
+  // atracción de los agujeros negros sobre los satélites reales (más intensa y con succión total si se acercan demasiado)
+  if (agujeros.length>0){
+    for (let j=simulacionesActivas.length-1;j>=0;j--){
+      const sat = simulacionesActivas[j];
+      for (const ag of agujeros){
+        const dx = sat.estado.x-ag.x, dy = sat.estado.y-ag.y;
+        const r = Math.hypot(dx,dy);
+        if (r < ag.radioEventoHorizonte*1.1 && r>0){
+          absorberSatelitePorAgujero(sat, j, ag);
+          break;
+        } else if (r < ag.radioInfluencia && r>0){
+          const fuerza = -(G*ag.masaEfectiva*0.9)/(r*r*r);
+          sat.estado.vx += fuerza*dx*dt; sat.estado.vy += fuerza*dy*dt;
+        }
+      }
+    }
+  }
+
+  // choques directos de asteroides/cometas contra satélites
+  verificarImpactosCaosSatelites();
+
+  // dos agujeros negros que quedan demasiado cerca colapsan juntos
+  verificarColisionAgujerosNegros();
+}
+
+function verificarColisionAgujerosNegros(){
+  for (let i=objetosCaos.length-1;i>=0;i--){
+    if (objetosCaos[i].tipo!=='agujero') continue;
+    for (let j=i-1;j>=0;j--){
+      if (objetosCaos[j].tipo!=='agujero') continue;
+      const a1 = objetosCaos[i], a2 = objetosCaos[j];
+      const d = Math.hypot(a1.x-a2.x, a1.y-a2.y);
+      if (d < UMBRAL_COLISION_AGUJEROS){
+        const pm = posicionAPantalla((a1.x+a2.x)/2, (a1.y+a2.y)/2);
+        crearExplosionSVG(pm.x, pm.y, 2.6);
+        activarTemblor(24);
+        reproducirSonido('boom');
+        if (a1.svg && a1.svg.parentNode) a1.svg.parentNode.removeChild(a1.svg);
+        if (a2.svg && a2.svg.parentNode) a2.svg.parentNode.removeChild(a2.svg);
+        // elimina el de mayor índice primero para no desordenar los índices restantes
+        const iMayor = Math.max(i,j), iMenor = Math.min(i,j);
+        objetosCaos.splice(iMayor,1);
+        objetosCaos.splice(iMenor,1);
+        mostrarAlerta('advertencia','⚫💥 Colapso gravitacional', 'Dos agujeros negros se acercaron demasiado y colapsaron juntos en una explosión masiva, destruyéndose ambos.');
+        return; // reinicia el chequeo en el próximo frame con los arreglos ya actualizados
+      }
+    }
+  }
+}
+
+function absorberSatelitePorAgujero(sat, idxEnArray, agujero){
+  const p = posicionAPantalla(sat.estado.x, sat.estado.y);
+  const pAg = posicionAPantalla(agujero.x, agujero.y);
+  const g = crearElementoSVG('circle', {cx:p.x, cy:p.y, r:4, fill:'#ef4444'});
+  document.getElementById('capa-caos').appendChild(g);
+  const inicio = performance.now();
+  function frame(t){
+    const prog = Math.min(1,(t-inicio)/550);
+    g.setAttribute('cx', p.x+(pAg.x-p.x)*prog);
+    g.setAttribute('cy', p.y+(pAg.y-p.y)*prog);
+    g.setAttribute('opacity', 1-prog);
+    if (prog<1) requestAnimationFrame(frame); else if (g.parentNode) g.parentNode.removeChild(g);
+  }
+  requestAnimationFrame(frame);
+  activarTemblor(14);
+  reproducirSonido('absorcion');
+  mensajeGlobal = {texto:`⚫ ${sat.nombreSatelite} fue succionado por un agujero negro y desapareció del sistema.`, hasta:Date.now()+6000};
+  if (sat.registro) sat.registro.trayectoria += " (⚫ absorbido por agujero negro)";
+  mostrarAlerta('error', '¡Nave engullida!', `${sat.nombreSatelite} se acercó demasiado a un agujero negro y fue absorbido por completo.`);
+  eliminarElementosSVG(sat);
+  simulacionesActivas.splice(idxEnArray,1);
+  actualizarSelectorEnfoque();
+}
+
+function absorberObjeto(o, agujero){
+  const idx = objetosCaos.indexOf(o);
+  if (idx===-1) return;
+  const p = posicionAPantalla(o.x,o.y);
+  const pAg = posicionAPantalla(agujero.x,agujero.y);
+  // pequeña animación de espiral hacia el horizonte
+  const g = crearElementoSVG('circle', {cx:p.x, cy:p.y, r:2.5, fill:'#a78bfa'});
+  document.getElementById('capa-caos').appendChild(g);
+  const inicio = performance.now();
+  function frame(t){
+    const prog = Math.min(1,(t-inicio)/500);
+    g.setAttribute('cx', p.x+(pAg.x-p.x)*prog);
+    g.setAttribute('cy', p.y+(pAg.y-p.y)*prog);
+    g.setAttribute('opacity', 1-prog);
+    if (prog<1) requestAnimationFrame(frame); else if (g.parentNode) g.parentNode.removeChild(g);
+  }
+  requestAnimationFrame(frame);
+  reproducirSonido('absorcion');
+  if (o.svg && o.svg.parentNode) o.svg.parentNode.removeChild(o.svg);
+  objetosCaos.splice(idx,1);
+}
+
+/* Calcula un pequeño desplazamiento visual del cuerpo central cuando un agujero
+   negro está dentro de su radio de influencia, simulando una leve deformación
+   gravitacional (efecto puramente visual, no altera la física real). */
+function calcularDistorsionCuerpoCentral(){
+  let dx = 0, dy = 0, maxIntensidad = 0;
+  const agujeros = objetosCaos.filter(o=>o.tipo==='agujero');
+  agujeros.forEach(ag=>{
+    const r = Math.max(1, Math.hypot(ag.x, ag.y));
+    if (r < ag.radioInfluencia){
+      const intensidad = Math.pow(1 - r/ag.radioInfluencia, 2);
+      const ang = Math.atan2(ag.y, ag.x);
+      dx += Math.cos(ang)*intensidad*10;
+      dy += Math.sin(ang)*intensidad*10;
+      maxIntensidad = Math.max(maxIntensidad, intensidad);
+    }
+  });
+  return {dx, dy, intensidad:maxIntensidad};
+}
+
+function dibujarCaos(){
+  if (objetosCaos.length===0) return;
+  const t = performance.now()*0.001;
+  objetosCaos.forEach(o=>{
+    const p = posicionAPantalla(o.x,o.y);
+    if (o.tipo==='asteroide'){
+      o.svg.setAttribute('transform', `translate(${p.x},${p.y}) rotate(${o.rotacion||0})`);
+    } else if (o.tipo==='cometa'){
+      const dirX = -o.x, dirY = o.y; // dirección opuesta al cuerpo central en coords físicas (y invertido en pantalla)
+      const mag = Math.hypot(dirX,dirY)||1;
+      const largoCola = 34+Math.sin(t*2+o.id)*4;
+      const nx = dirX/mag, ny = -dirY/mag;
+      const perpX = -ny*3, perpY = nx*3;
+      const puntaX = nx*largoCola, puntaY = ny*largoCola;
+      o.svgCola.setAttribute('d', `M${perpX.toFixed(1)},${perpY.toFixed(1)} L${puntaX.toFixed(1)},${puntaY.toFixed(1)} L${(-perpX).toFixed(1)},${(-perpY).toFixed(1)} Z`);
+      o.svg.setAttribute('transform', `translate(${p.x},${p.y})`);
+    } else if (o.tipo==='agujero'){
+      o.svg.setAttribute('transform', `translate(${p.x},${p.y})`);
+      for(let i=0;i<3;i++){
+        const disco = document.getElementById(`disco-${o.id}-${i}`);
+        if (disco) disco.setAttribute('transform', `rotate(${(t*40*(i%2?1:-1))%360})`);
+      }
+    }
+  });
+}
+
+/* ============================================================
+   PANEL EDUCATIVO
+   ============================================================ */
+let panelEducativoDatosVivos = null;
+
+const conceptosBase = {
+  orbita:{titulo:'¿Qué es una órbita?', texto:'Es la trayectoria curva que sigue un objeto alrededor de otro debido a la gravedad, en un equilibrio constante entre la velocidad del objeto (que lo empuja en línea recta) y la atracción gravitatoria (que lo curva hacia el cuerpo central).'},
+  elipse:{titulo:'Órbita elíptica', texto:'La mayoría de las órbitas reales no son círculos perfectos sino elipses: el objeto se acerca más al cuerpo central en un punto (periapsis) y se aleja más en otro (apoapsis).'},
+  escape:{titulo:'Velocidad de escape', texto:'Es la velocidad mínima necesaria para que un objeto se libere por completo de la gravedad de un cuerpo, sin necesidad de más impulso. Depende de la masa del cuerpo y de la distancia al centro.'},
+  hohmann:{titulo:'Transferencia de Hohmann', texto:'Es la maniobra más eficiente en combustible para pasar de una órbita circular a otra: dos quemados de motor sobre una elipse de transferencia tangente a ambas órbitas.'},
+  periapsis:{titulo:'Periapsis', texto:'Es el punto de la órbita más cercano al cuerpo central. Ahí el objeto alcanza su mayor velocidad.'},
+  apoapsis:{titulo:'Apoapsis', texto:'Es el punto de la órbita más lejano al cuerpo central. Ahí el objeto alcanza su menor velocidad.'},
+  gravedad:{titulo:'¿Cómo actúa la gravedad?', texto:'Todo objeto con masa atrae a otros objetos con una fuerza proporcional al producto de sus masas e inversamente proporcional al cuadrado de la distancia entre ellos (Ley de Gravitación Universal de Newton).'}
+};
+
+function abrirPanelEducativoCuerpo(cuerpo){
+  panelEducativoDatosVivos = {tipo:'cuerpo', ref:cuerpo};
+  document.getElementById('edu-titulo').textContent = `🪐 ${cuerpo.nombre}`;
+  document.getElementById('edu-subtitulo').textContent = 'Cuerpo central de la simulación';
+  let html = '';
+  ['gravedad','orbita','escape'].forEach(k=>{
+    const c = conceptosBase[k];
+    html += `<div class="concepto"><strong>${c.titulo}</strong><p>${c.texto}</p></div>`;
+  });
+  html += `<div class="curiosidad">🔭 <b>Curiosidad:</b> ${cuerpo.curiosidad||'Cada cuerpo celeste guarda secretos por descubrir.'}</div>`;
+  html += `<div class="datos-vivos">
+    <div>Masa<b>${cuerpo.masa.toExponential(3)} kg</b></div>
+    <div>Radio<b>${(cuerpo.radio/1000).toFixed(0)} km</b></div>
+  </div>`;
+  document.getElementById('edu-contenido').innerHTML = html;
+  document.getElementById('panel-educativo').classList.add('visible');
+}
+
+function abrirPanelEducativoSatelite(datos){
+  panelEducativoDatosVivos = {tipo:'satelite', ref:datos};
+  document.getElementById('edu-titulo').textContent = `🛰️ ${datos.nombreSatelite}`;
+  document.getElementById('edu-subtitulo').textContent = datos.mision.nombre;
+  let html = '';
+  ['orbita','elipse','periapsis','apoapsis','hohmann'].forEach(k=>{
+    const c = conceptosBase[k];
+    html += `<div class="concepto"><strong>${c.titulo}</strong><p>${c.texto}</p></div>`;
+  });
+  html += `<div id="edu-datos-vivos-satelite"></div>`;
+  document.getElementById('edu-contenido').innerHTML = html;
+  document.getElementById('panel-educativo').classList.add('visible');
+  actualizarDatosVivosSatelite(datos);
+}
+function actualizarDatosVivosSatelite(datos){
+  const cont = document.getElementById('edu-datos-vivos-satelite');
+  if (!cont) return;
+  const {a, ecc} = elementosOrbitales(datos.mu, datos.estado.x, datos.estado.y, datos.estado.vx, datos.estado.vy);
+  const periapsis = isFinite(a) ? a*(1-ecc)-datos.cuerpo.radio : NaN;
+  const apoapsis = isFinite(a) ? a*(1+ecc)-datos.cuerpo.radio : NaN;
+  cont.innerHTML = `<div class="datos-vivos">
+    <div>Periapsis (alt.)<b>${isFinite(periapsis)? (periapsis/1000).toFixed(0)+' km' : '—'}</b></div>
+    <div>Apoapsis (alt.)<b>${isFinite(apoapsis)? (apoapsis/1000).toFixed(0)+' km' : '—'}</b></div>
+  </div>`;
+}
+function cerrarPanelEducativo(){
+  document.getElementById('panel-educativo').classList.remove('visible');
+  panelEducativoDatosVivos = null;
+}
+
+/* ============================================================
+   CONTROLES GENERALES
+   ============================================================ */
+function pausarReanudar(){
+  enPausa = !enPausa;
+  document.querySelector('button[onclick="pausarReanudar()"]').textContent = enPausa ? "▶️ Reanudar" : "⏸️ Pausa";
+}
+
+function mostrarReporte(){
+  let html = `<div class="etiqueta">📊 REPORTE GENERAL</div>`;
+  html += `<br>Simulaciones usadas: ${contador}/${MAX_SIMULACIONES}`;
+  if (contador===0){
+    html += `<br>Aún no hay simulaciones registradas.`;
+  } else {
+    html += `<br><br><div class="etiqueta">Por satélite (nombre):</div>`;
+    Object.keys(registroPorNombre).forEach(nombre=>{
+      const info = registroPorNombre[nombre];
+      html += `<br>🛰️ ${nombre}: ${info.cuenta}/${MAX_LANZAMIENTOS_POR_NOMBRE} lanzamientos`;
+    });
+    html += `<br><br><div class="etiqueta">Historial completo:</div>`;
+    simulaciones.forEach((sim,i)=>{
+      html += `<br><br>👉 Simulación ${i+1}: ${sim.nombre} (lanz. #${sim.lanzamientoNum})`;
+      html += `<br>Cuerpo: ${sim.cuerpo} | Misión: ${sim.mision}`;
+      html += `<br>Trayectoria: ${sim.trayectoria}`;
+      html += `<br>Velocidad: ${sim.velocidad.toFixed(0)} m/s | Distancia: ${sim.distancia.toExponential(2)} m`;
+      html += `<br>Combustible estimado inicial: ${sim.combustible.toFixed(1)} kg`;
+    });
+    html += `<br><br>📈 Resumen: ${circulares} circulares, ${elipticas} elípticas, ${parabolicas} parabólicas, ${hiperbolicas} hiperbólicas`;
+    html += `<br>Promedio velocidad: ${calcularPromedio(sumaVelocidad, contador).toFixed(0)} m/s`;
+    if (indiceEnfoque>=0 && simulacionesActivas[indiceEnfoque]){
+      html += `<br><br>🛰️ Estado actual en vivo: ${Math.max(0,simulacionesActivas[indiceEnfoque].combustible).toFixed(1)} kg de combustible restante`;
+    }
+  }
+  document.getElementById('reporte').innerHTML = html;
+}
+
+function reiniciarTodo(){
+  if (confirm("¿Borrar todos los datos y simulaciones?")){
+    simulaciones = []; contador = 0; registroPorNombre = {};
+    circulares = elipticas = parabolicas = hiperbolicas = 0;
+    sumaVelocidad = sumaDistancia = sumaCombustible = 0;
+    simulacionesActivas.forEach(eliminarElementosSVG);
+    desvaneciendo.forEach(eliminarElementosSVG);
+    simulacionesActivas = []; desvaneciendo = []; indiceEnfoque = -1; mensajeGlobal = null;
+    limpiarCaos();
+    cuerpoCentralSVGActual = null;
+    document.getElementById('capa-cuerpo-central').innerHTML = '';
+    document.getElementById('capa-hud').innerHTML = '';
+    offsetX = 0; offsetY = 0; panVelX = 0; panVelY = 0; modoSeguimiento = false;
+    actualizarBotonSeguir();
+    ajustarLienzo();
+    document.getElementById('resultados').innerHTML = "";
+    document.getElementById('reporte').innerHTML = "";
+    document.getElementById('telemetria').style.display = 'none';
+    document.getElementById('estado-mision').style.display = 'none';
+    document.getElementById('control-enfoque').style.display = 'none';
+    document.querySelector('button[onclick="pausarReanudar()"]').textContent = "⏸️ Pausa";
+    cerrarPanelEducativo();
+    mostrarAlerta('confirmacion', 'Reiniciado', 'Todos los datos y simulaciones fueron borrados correctamente.');
+  }
+}
+</script>
+</body>
+</html>
